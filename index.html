@@ -481,13 +481,31 @@ function loadSession() {
 function saveSession(s) { localStorage.setItem(SESSION_KEY, JSON.stringify(s)); }
 function clearSession() { localStorage.removeItem(SESSION_KEY); }
 
+// The underlying KV store can return an incomplete list on any single read
+// (observed directly against this same backend — a freshly-created employee
+// missing from the very next list() call, repeatedly, not just once). A
+// false negative here is silent and serious: someone who exists but doesn't
+// show up in the list literally can't log in. Poll a few times and merge by
+// id — a read that DOES see an entry proves it exists, so the union across
+// attempts converges on the true set even if any single attempt is short.
+async function fetchEmployeesReliably() {
+  const byId = new Map();
+  for (let i = 0; i < 4; i++) {
+    try {
+      const res = await fetchJson(MLF_WORKER_URL + '/employees', { headers: mlfHeaders() });
+      for (const e of (res.employees || [])) byId.set(e.id, e);
+    } catch (e) { /* keep whatever we already merged, try again below */ }
+    if (i < 3) await new Promise(r => setTimeout(r, 400));
+  }
+  return Array.from(byId.values());
+}
+
 async function boot() {
   document.getElementById('print-date').textContent = 'Generated ' + new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-  try {
-    employees = (await fetchJson(MLF_WORKER_URL + '/employees', { headers: mlfHeaders() })).employees;
-  } catch (e) {
-    showGateError('Could not reach the server: ' + e.message);
-    employees = [];
+  employees = await fetchEmployeesReliably();
+  if (!employees.length) {
+    // Could genuinely be zero employees (first run) or could be every attempt
+    // missing — either way there's nothing more reliable to fall back to here.
   }
   session = loadSession();
   if (session && employees.some(e => e.id === session.id)) {
@@ -589,13 +607,21 @@ async function ensureSeedLeads() {
 // ============ RENDER ============
 function esc(s) { return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
+// Same reasoning as fetchEmployeesReliably() -- a single list() read can miss
+// entries that genuinely exist. Poll and merge by id rather than trusting one read.
 async function reloadLeads() {
-  try {
-    const res = await fetchJson(MLF_WORKER_URL + '/leads', { headers: mlfHeaders() });
-    leads = res.leads || [];
-  } catch (e) {
-    toast('Could not load leads: ' + e.message);
+  const byId = new Map();
+  let lastErr = null;
+  for (let i = 0; i < 3; i++) {
+    try {
+      const res = await fetchJson(MLF_WORKER_URL + '/leads', { headers: mlfHeaders() });
+      for (const l of (res.leads || [])) byId.set(l.id, l);
+      lastErr = null;
+    } catch (e) { lastErr = e; }
+    if (i < 2) await new Promise(r => setTimeout(r, 400));
   }
+  if (lastErr && byId.size === 0) toast('Could not load leads: ' + lastErr.message);
+  leads = Array.from(byId.values());
   renderAll();
 }
 function renderAll() { renderStats(); renderLeads(); }
