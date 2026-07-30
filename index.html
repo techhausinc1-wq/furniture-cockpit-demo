@@ -113,6 +113,8 @@
   .lead-territory { font-size: 11.5px; color: var(--terracotta); font-weight: 600; }
   .lead-why { font-size: 12.5px; color: var(--text-dim); max-width: 280px; }
   .lead-contact { font-size: 12px; color: var(--text-dim); }
+  .contact-actions { display: flex; gap: 6px; margin-top: 6px; }
+  .contact-actions .btn.sm { padding: 3px 8px; font-size: 11px; }
   .cat-pill { font-size: 10.5px; font-weight: 700; text-transform: uppercase; padding: 2px 8px; border-radius: 5px; display: inline-block; }
   .cat-rep { background: var(--navy); color: #fff; }
   .cat-wholesaler { background: var(--olive-bg); color: var(--olive); }
@@ -189,7 +191,7 @@
           <div><label>Your name</label><input type="text" id="setup-name" placeholder="Vlad"></div>
           <div><label>Choose a 4-digit PIN</label><input type="text" id="setup-pin" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="e.g. 1234"></div>
         </div>
-        <button class="btn primary full" style="margin-top:14px" onclick="createFirstOwner()">Create account</button>
+        <button class="btn primary full" id="create-account-btn" style="margin-top:14px" onclick="createFirstOwner()">Create account</button>
       </div>
     </div>
 
@@ -551,7 +553,7 @@ async function fetchEmployeesReliably() {
   const byId = new Map();
   for (let i = 0; i < 4; i++) {
     try {
-      const res = await fetchJson(MLF_WORKER_URL + '/employees', { headers: mlfHeaders() });
+      const res = await fetchJson(MLF_WORKER_URL + '/employees', { headers: mlfHeaders(), timeoutMs: 12000 });
       for (const e of (res.employees || [])) byId.set(e.id, e);
     } catch (e) { /* keep whatever we already merged, try again below */ }
     if (i < 3) await new Promise(r => setTimeout(r, 400));
@@ -598,16 +600,24 @@ async function createFirstOwner() {
   const pin = document.getElementById('setup-pin').value.trim();
   if (!name) return showGateError('Enter your name.');
   if (!/^\d{4}$/.test(pin)) return showGateError('PIN must be 4 digits.');
+  const btn = document.getElementById('create-account-btn');
+  btn.disabled = true; btn.textContent = 'Creating…';
+  showGateError('');
   try {
     const emp = await fetchJson(MLF_WORKER_URL + '/employees', {
-      method: 'POST', headers: mlfHeaders(), body: JSON.stringify({ name, pin, role: 'owner' }),
+      method: 'POST', headers: mlfHeaders(), body: JSON.stringify({ name, pin, role: 'owner' }), timeoutMs: 15000,
     });
     employees.push(emp);
     session = emp; saveSession(session);
-    toast('Account created — loading seed leads…');
-    await Promise.all([ensureSeedLeads(), ensureSeedShows()]);
+    // Enter the app immediately -- the account already exists on the server at this
+    // point, so nothing after this should be able to strand the user on this screen.
     enterApp();
-  } catch (e) { showGateError(e.message); }
+    ensureSeedLeads().catch(e => console.warn('[MLF] seed leads failed:', e.message));
+    ensureSeedShows().catch(e => console.warn('[MLF] seed shows failed:', e.message));
+  } catch (e) {
+    showGateError(e.message);
+    btn.disabled = false; btn.textContent = 'Create account';
+  }
 }
 function selectEmployeeForLogin(id) {
   pinTargetEmployee = employees.find(e => e.id === id);
@@ -635,12 +645,13 @@ function pinBackspace() { pendingPin = pendingPin.slice(0, -1); renderPinDots();
 async function attemptLogin() {
   try {
     const emp = await fetchJson(MLF_WORKER_URL + '/employees/login', {
-      method: 'POST', headers: mlfHeaders(), body: JSON.stringify({ id: pinTargetEmployee.id, pin: pendingPin }),
+      method: 'POST', headers: mlfHeaders(), body: JSON.stringify({ id: pinTargetEmployee.id, pin: pendingPin }), timeoutMs: 15000,
     });
     session = emp; saveSession(session);
     enterApp();
   } catch (e) {
-    document.getElementById('gate-err').textContent = 'Incorrect PIN.';
+    document.getElementById('gate-err').textContent = e.message && e.message.indexOf('Timed out') === 0
+      ? 'Connection timed out — try again.' : 'Incorrect PIN.';
     pendingPin = ''; renderPinDots();
   }
 }
@@ -657,21 +668,43 @@ async function enterApp() {
 
 async function ensureSeedLeads() {
   try {
-    const existing = await fetchJson(MLF_WORKER_URL + '/leads', { headers: mlfHeaders() });
-    if (existing.leads && existing.leads.length > 0) return;
-    await fetchJson(MLF_WORKER_URL + '/leads', { method: 'POST', headers: mlfHeaders(), body: JSON.stringify(SEED_LEADS) });
+    const existing = await fetchJson(MLF_WORKER_URL + '/leads', { headers: mlfHeaders(), timeoutMs: 12000 });
+    if (existing.leads && existing.leads.length > 0) { leads = existing.leads; renderAll(); return; }
+    await fetchJson(MLF_WORKER_URL + '/leads', { method: 'POST', headers: mlfHeaders(), body: JSON.stringify(SEED_LEADS), timeoutMs: 20000 });
+    await reloadLeads();
   } catch (e) { console.warn('[MLF] seed load failed:', e.message); }
 }
 async function ensureSeedShows() {
   try {
-    const existing = await fetchJson(MLF_WORKER_URL + '/shows', { headers: mlfHeaders() });
-    if (existing.shows && existing.shows.length > 0) return;
-    await fetchJson(MLF_WORKER_URL + '/shows', { method: 'POST', headers: mlfHeaders(), body: JSON.stringify(SEED_SHOWS) });
+    const existing = await fetchJson(MLF_WORKER_URL + '/shows', { headers: mlfHeaders(), timeoutMs: 12000 });
+    if (existing.shows && existing.shows.length > 0) { shows = existing.shows; renderAll(); return; }
+    await fetchJson(MLF_WORKER_URL + '/shows', { method: 'POST', headers: mlfHeaders(), body: JSON.stringify(SEED_SHOWS), timeoutMs: 20000 });
+    await reloadShows();
   } catch (e) { console.warn('[MLF] show seed load failed:', e.message); }
 }
 
 // ============ RENDER ============
 function esc(s) { return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// Pull an email/phone out of the freeform contact string so we can offer one-tap
+// Call / Email actions without needing separate structured fields on the backend.
+function parseContact(contact) {
+  const c = String(contact || '');
+  const email = (c.match(/[\w.+-]+@[\w-]+\.[\w.-]+/) || [])[0] || '';
+  const phone = (c.match(/(\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/) || [])[0] || '';
+  return { email, phone };
+}
+function gmailComposeUrl(to, subject) {
+  return 'https://mail.google.com/mail/?view=cm&fs=1&to=' + encodeURIComponent(to) + '&su=' + encodeURIComponent(subject);
+}
+function renderContactCell(contact, company) {
+  if (!contact) return '<span style="color:var(--text-mute)">—</span>';
+  const { email, phone } = parseContact(contact);
+  const actions = [];
+  if (phone) actions.push(`<a class="btn ghost sm" href="tel:${phone.replace(/[^\d+]/g, '')}">Call</a>`);
+  if (email) actions.push(`<a class="btn ghost sm" href="${gmailComposeUrl(email, 'Modern Line Furniture — ' + company)}" target="_blank" rel="noopener">Email</a>`);
+  return esc(contact) + (actions.length ? `<div class="contact-actions">${actions.join('')}</div>` : '');
+}
 
 // Same reasoning as fetchEmployeesReliably() -- a single list() read can miss
 // entries that genuinely exist. Poll and merge by id rather than trusting one read.
@@ -680,7 +713,7 @@ async function reloadLeads() {
   let lastErr = null;
   for (let i = 0; i < 3; i++) {
     try {
-      const res = await fetchJson(MLF_WORKER_URL + '/leads', { headers: mlfHeaders() });
+      const res = await fetchJson(MLF_WORKER_URL + '/leads', { headers: mlfHeaders(), timeoutMs: 12000 });
       for (const l of (res.leads || [])) byId.set(l.id, l);
       lastErr = null;
     } catch (e) { lastErr = e; }
@@ -698,7 +731,7 @@ async function reloadShows() {
   let lastErr = null;
   for (let i = 0; i < 3; i++) {
     try {
-      const res = await fetchJson(MLF_WORKER_URL + '/shows', { headers: mlfHeaders() });
+      const res = await fetchJson(MLF_WORKER_URL + '/shows', { headers: mlfHeaders(), timeoutMs: 12000 });
       for (const s of (res.shows || [])) byId.set(s.id, s);
       lastErr = null;
     } catch (e) { lastErr = e; }
@@ -903,7 +936,7 @@ function renderLeads() {
           <td><span class="cat-pill cat-${esc(l.category)}">${esc(l.category)}</span></td>
           <td class="lead-territory">${esc(l.territory)}</td>
           <td class="lead-why">${esc(l.why)}</td>
-          <td class="lead-contact">${l.contact ? esc(l.contact) : '<span style="color:var(--text-mute)">—</span>'}</td>
+          <td class="lead-contact">${renderContactCell(l.contact, l.company)}</td>
           <td>
             <select class="status-select status-${esc(l.status)}" onchange="updateStatus('${l.id}', this.value)">
               <option value="new" ${l.status==='new'?'selected':''}>New</option>
@@ -1037,7 +1070,9 @@ async function findLeads() {
   const knownSites = new Set(leads.map(l => (l.website || '').toLowerCase().replace(/\/$/, '')));
 
   const system = 'You are a B2B partnerships researcher helping a commercial furniture manufacturer (Modern Line Furniture — custom seating, tables, booths, lounge furniture for restaurants, hotels and hospitality spaces, made in the USA, NJ-based) find real, currently-operating companies to pitch as sales/distribution partners. ' +
-    'Search the web and return ONLY a JSON array (no prose, no markdown). Each item MUST have: {company, website, territory, why (1 sentence explaining the fit), contact (email or phone if you can find one, else empty string)}. ' +
+    'Search the web and return ONLY a JSON array (no prose, no markdown). Each item MUST have: {company, website, territory, why (1 sentence explaining the fit), contact}. ' +
+    'For "contact", check the company\'s own site (About/Team/Contact pages) and build a single string combining whatever you can actually verify, in this exact order and format, omitting any piece you cannot find: "Ask for: <name>, <title> · <phone> · <email>". ' +
+    'A phone number alone (e.g. the general office line) is still useful — always include one if the site publishes one, even without a named contact. Never invent a name, phone number, or email — leave contact as an empty string only if truly nothing is published. ' +
     'Only include REAL companies with an actual working website you can identify — never invent a company or URL. Return 6-10 items.';
   const userMsg = 'Find ' + category + ' covering ' + region + (keyword ? (', specifically related to: ' + keyword) : '') +
     ' who could plausibly add a new hospitality/restaurant furniture brand to their line card or catalog. Prioritize companies not already in this list of known sites: ' +
@@ -1133,7 +1168,7 @@ async function submitAddEmployee(evt) {
   const name = document.getElementById('tf-name').value.trim();
   const pin = document.getElementById('tf-pin').value.trim();
   try {
-    const emp = await fetchJson(MLF_WORKER_URL + '/employees', { method: 'POST', headers: mlfHeaders(), body: JSON.stringify({ name, pin, role: 'employee' }) });
+    const emp = await fetchJson(MLF_WORKER_URL + '/employees', { method: 'POST', headers: mlfHeaders(), body: JSON.stringify({ name, pin, role: 'employee' }), timeoutMs: 15000 });
     employees.push(emp);
     openTeamModal();
     toast(name + ' added to the team');
