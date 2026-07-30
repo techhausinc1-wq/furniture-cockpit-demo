@@ -224,6 +224,7 @@
     <div class="tag">Lead Finder — Partner &amp; Reseller Prospecting</div>
     <div class="spacer"></div>
     <button class="btn ghost sm no-print" onclick="openTeamModal()">Team</button>
+    <button class="btn ghost sm no-print" onclick="exportLeadsToExcel()">Export to Excel</button>
     <button class="btn ghost sm no-print" onclick="window.print()">Print / Export PDF</button>
     <div class="user-chip"><div class="user-avatar" id="user-avatar">?</div><span id="user-name"></span></div>
     <span class="logout-btn no-print" onclick="logout()">Log out</span>
@@ -284,8 +285,13 @@
     <div id="leads-wrap"></div>
 
     <div class="panel search-panel no-print" style="margin-top:36px;">
-      <h2>Trade shows</h2>
-      <div class="sub">Industry events where reps, dealers, and hospitality buyers actually meet manufacturers — exhibiting or just attending is its own lead-gen channel.</div>
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
+        <div>
+          <h2>Trade shows</h2>
+          <div class="sub">Industry events where reps, dealers, and hospitality buyers actually meet manufacturers — exhibiting or just attending is its own lead-gen channel.</div>
+        </div>
+        <button class="btn ghost sm" style="flex-shrink:0" onclick="exportShowsToExcel()">Export to Excel</button>
+      </div>
       <div class="search-row">
         <div class="field">
           <label>Focus (optional)</label>
@@ -681,6 +687,40 @@ async function ensureSeedShows() {
     await fetchJson(MLF_WORKER_URL + '/shows', { method: 'POST', headers: mlfHeaders(), body: JSON.stringify(SEED_SHOWS), timeoutMs: 20000 });
     await reloadShows();
   } catch (e) { console.warn('[MLF] show seed load failed:', e.message); }
+}
+
+// ============ EXCEL / CSV EXPORT ============
+function csvEscape(v) {
+  const s = String(v == null ? '' : v);
+  return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+function toCsv(rows) { return rows.map(r => r.map(csvEscape).join(',')).join('\r\n'); }
+function downloadCsv(filename, csv) {
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+function exportLeadsToExcel() {
+  const headers = ['Company', 'Website', 'Category', 'Territory', 'Why it fits', 'Contact', 'Status', 'Assigned to', 'Assign note', 'Verified', 'Notes', 'Source'];
+  const rows = leads.slice().sort((a, b) => a.company.localeCompare(b.company)).map(l => [
+    l.company, l.website, l.category, l.territory, l.why, l.contact, l.status,
+    l.assignedToName || '', l.assignNote || '',
+    l.verified ? (l.verified.ok ? 'Verified ' + l.verified.date : 'Flagged ' + l.verified.date) : '',
+    l.notes, l.source,
+  ]);
+  downloadCsv('modern-line-leads-' + new Date().toISOString().slice(0, 10) + '.csv', toCsv([headers, ...rows]));
+  toast('Exported ' + rows.length + ' leads to Excel');
+}
+function exportShowsToExcel() {
+  const headers = ['Show', 'Dates', 'Location', 'Why it fits', 'Apply URL', 'Status', 'Assigned to', 'Assign note', 'Notes', 'Source'];
+  const rows = shows.slice().sort((a, b) => a.name.localeCompare(b.name)).map(s => [
+    s.name, s.dates, s.location, s.why, s.applyUrl, s.status, s.assignedToName || '', s.assignNote || '', s.notes, s.source,
+  ]);
+  downloadCsv('modern-line-shows-' + new Date().toISOString().slice(0, 10) + '.csv', toCsv([headers, ...rows]));
+  toast('Exported ' + rows.length + ' shows to Excel');
 }
 
 // ============ RENDER ============
