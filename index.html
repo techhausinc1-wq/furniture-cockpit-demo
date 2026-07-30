@@ -124,6 +124,9 @@
   .status-responded { background: #dbe9f5; color: var(--navy); }
   .status-partner { background: var(--olive-bg); color: var(--olive); }
   .status-dead { background: var(--danger-bg); color: var(--danger); }
+  .status-interested { background: var(--gold-bg); color: var(--gold); }
+  .status-registered { background: #dbe9f5; color: var(--navy); }
+  .status-attended { background: var(--olive-bg); color: var(--olive); }
   .verify-badge { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; margin-left: 6px; }
   .verify-live { background: var(--olive-bg); color: var(--olive); }
   .verify-stale { background: var(--gold-bg); color: var(--gold); }
@@ -277,6 +280,22 @@
     </div>
 
     <div id="leads-wrap"></div>
+
+    <div class="panel search-panel no-print" style="margin-top:36px;">
+      <h2>Trade shows</h2>
+      <div class="sub">Industry events where reps, dealers, and hospitality buyers actually meet manufacturers — exhibiting or just attending is its own lead-gen channel.</div>
+      <div class="search-row">
+        <div class="field">
+          <label>Focus (optional)</label>
+          <input id="sf-show-keyword" placeholder="e.g. restaurant, hospitality design, outdoor furniture">
+        </div>
+        <button class="btn primary" id="show-search-btn" onclick="findShows()">Search for shows</button>
+      </div>
+      <div class="progress-note" id="show-search-progress"><div class="spin"></div><span id="show-search-progress-text">Searching the web…</span></div>
+      <div class="error-note" id="show-search-error"></div>
+    </div>
+
+    <div id="shows-wrap"></div>
   </main>
 
   <footer class="pagefoot no-print">Modern Line Furniture · Lead Finder · leads are found via live web search — verify contact details before relying on them for outreach.</footer>
@@ -334,6 +353,33 @@
       </div>
       <div class="form-actions">
         <button type="button" class="btn ghost" onclick="closeModal('assign-modal')">Cancel</button>
+        <button type="submit" class="btn primary">Send</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ ASSIGN SHOW MODAL ============ -->
+<div class="modal-overlay" id="assign-show-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">Send to someone</div>
+      <span class="modal-close" onclick="closeModal('assign-show-modal')">&times;</span>
+    </div>
+    <div class="assign-lead-preview" id="assign-show-preview"></div>
+    <form id="assign-show-form" onsubmit="submitAssignShowForm(event)">
+      <div class="form-grid">
+        <div>
+          <label>Send to</label>
+          <select id="asf-employee" required></select>
+        </div>
+        <div>
+          <label>Note</label>
+          <textarea id="asf-note" rows="3" placeholder="e.g. Worth exhibiting at, check the cost. / Can you go check this one out?"></textarea>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn ghost" onclick="closeModal('assign-show-modal')">Cancel</button>
         <button type="submit" class="btn primary">Send</button>
       </div>
     </form>
@@ -451,6 +497,18 @@ const SEED_LEADS = [
   {company:"Global Industrial (Supplier Partner Program)", website:"https://www.globalindustrial.com", category:"wholesaler", territory:"National", why:"Formal paid co-op Supplier Partner Program ($8k-$75k tiers) -- evaluate ROI first.", contact:"globalindustrial.com/spp", source:"seed"},
 ];
 
+// Verified via live web research on 2026-07-30 -- real dates/venues/apply links,
+// not invented. Priority order roughly matches audience fit for restaurant/
+// hospitality contract furniture.
+const SEED_SHOWS = [
+  {name:"NeoCon", dates:"Jun 13-16, 2027", location:"The Mart, Chicago", why:"Leading commercial-interiors trade fair, 400+ exhibitors incl. contract furniture/seating -- best direct fit for a contract manufacturer.", applyUrl:"https://neocon.com/exhibit-at-neocon", source:"seed"},
+  {name:"HD Expo", dates:"May 3-5, 2027", location:"Mandalay Bay, Las Vegas", why:"Hospitality design show -- ~88% of attendees are hospitality purchasing decision-makers.", applyUrl:"https://hdexpo.hospitalitydesign.com/exhibitor/why-exhibit/", source:"seed"},
+  {name:"BDNY", dates:"Nov 8-9, 2026", location:"Javits Center, NYC", why:"Leading hospitality/boutique design fair. Also runs BD Match, a curated 1:1 meeting program pairing FF&E suppliers with design-firm decision-makers.", applyUrl:"https://bdny.com/apply-to-exhibit/", source:"seed"},
+  {name:"NRA Show (National Restaurant Association)", dates:"May 22-25, 2027", location:"McCormick Place, Chicago", why:"Largest foodservice show in the Western Hemisphere (~53,000 attendees) -- furniture/seating/tabletop vendors exhibit alongside food/kitchen suppliers.", applyUrl:"https://www.nationalrestaurantshow.com/home/become-an-exhibitor/", source:"seed"},
+  {name:"ICFF (International Contemporary Furniture Fair)", dates:"Nov 14-16, 2027", location:"Javits Center, NYC", why:"From 2027 it co-locates with BDNY at the same venue/week, explicitly to unify hospitality/commercial/residential design -- consider pairing the two.", applyUrl:"https://icff.com/fair/exhibit-inquire/", source:"seed"},
+  {name:"Casual Market Atlanta", dates:"Sep 15-18, 2026 / Jul 13-15, 2027", location:"AmericasMart Atlanta", why:"Only relevant if pursuing an outdoor/casual furniture line -- the old Chicago edition is defunct, this is the surviving one.", applyUrl:"https://casualmarketatlanta.com/inquire-about-space/", source:"seed"},
+];
+
 // ============ FETCH HELPER ============
 async function fetchJson(url, opts) {
   opts = opts || {};
@@ -471,6 +529,7 @@ function mlfHeaders() { return { 'Content-Type': 'application/json', 'X-Access-C
 let session = null; // {id, name, role}
 let employees = [];
 let leads = [];
+let shows = [];
 let currentFilter = 'all';
 let pendingPin = '';
 let pinTargetEmployee = null;
@@ -546,7 +605,7 @@ async function createFirstOwner() {
     employees.push(emp);
     session = emp; saveSession(session);
     toast('Account created — loading seed leads…');
-    await ensureSeedLeads();
+    await Promise.all([ensureSeedLeads(), ensureSeedShows()]);
     enterApp();
   } catch (e) { showGateError(e.message); }
 }
@@ -593,7 +652,7 @@ async function enterApp() {
   document.getElementById('app').classList.add('active');
   document.getElementById('user-avatar').textContent = session.name[0].toUpperCase();
   document.getElementById('user-name').textContent = session.name;
-  await reloadLeads();
+  await Promise.all([reloadLeads(), reloadShows()]);
 }
 
 async function ensureSeedLeads() {
@@ -602,6 +661,13 @@ async function ensureSeedLeads() {
     if (existing.leads && existing.leads.length > 0) return;
     await fetchJson(MLF_WORKER_URL + '/leads', { method: 'POST', headers: mlfHeaders(), body: JSON.stringify(SEED_LEADS) });
   } catch (e) { console.warn('[MLF] seed load failed:', e.message); }
+}
+async function ensureSeedShows() {
+  try {
+    const existing = await fetchJson(MLF_WORKER_URL + '/shows', { headers: mlfHeaders() });
+    if (existing.shows && existing.shows.length > 0) return;
+    await fetchJson(MLF_WORKER_URL + '/shows', { method: 'POST', headers: mlfHeaders(), body: JSON.stringify(SEED_SHOWS) });
+  } catch (e) { console.warn('[MLF] show seed load failed:', e.message); }
 }
 
 // ============ RENDER ============
@@ -624,7 +690,187 @@ async function reloadLeads() {
   leads = Array.from(byId.values());
   renderAll();
 }
-function renderAll() { renderStats(); renderLeads(); }
+function renderAll() { renderStats(); renderLeads(); renderShows(); }
+
+// Same reasoning as reloadLeads() -- poll and merge by id rather than trusting one read.
+async function reloadShows() {
+  const byId = new Map();
+  let lastErr = null;
+  for (let i = 0; i < 3; i++) {
+    try {
+      const res = await fetchJson(MLF_WORKER_URL + '/shows', { headers: mlfHeaders() });
+      for (const s of (res.shows || [])) byId.set(s.id, s);
+      lastErr = null;
+    } catch (e) { lastErr = e; }
+    if (i < 2) await new Promise(r => setTimeout(r, 400));
+  }
+  if (lastErr && byId.size === 0) toast('Could not load shows: ' + lastErr.message);
+  shows = Array.from(byId.values());
+  renderShows();
+}
+function renderShows() {
+  const wrap = document.getElementById('shows-wrap');
+  if (!wrap) return;
+  const sorted = shows.slice().sort((a, b) => a.name.localeCompare(b.name));
+  if (!sorted.length) {
+    wrap.innerHTML = '<div class="empty"><div class="big">No shows tracked yet.</div>Use "Search for shows" above.</div>';
+    return;
+  }
+  wrap.innerHTML = `<table class="leads">
+    <thead><tr>
+      <th>Show</th><th>Dates</th><th>Location</th><th>Why it's relevant</th><th>Status</th><th class="no-print">Actions</th>
+    </tr></thead>
+    <tbody>
+      ${sorted.map(s => `
+        <tr>
+          <td>
+            <div class="lead-name">${s.applyUrl ? `<a href="${esc(s.applyUrl)}" target="_blank" rel="noopener">${esc(s.name)}</a>` : esc(s.name)}</div>
+            ${s.assignedTo ? `<div class="assign-badge">→ ${esc(s.assignedToName)}${s.assignNote ? `<span class="assign-note-text">"${esc(s.assignNote)}"</span>` : ''}</div>` : ''}
+          </td>
+          <td class="lead-territory">${esc(s.dates)}</td>
+          <td class="lead-contact">${esc(s.location)}</td>
+          <td class="lead-why">${esc(s.why)}</td>
+          <td>
+            <select class="status-select status-${esc(s.status).replace('not-registered','new')}" onchange="updateShowStatus('${s.id}', this.value)">
+              <option value="not-registered" ${s.status==='not-registered'?'selected':''}>Not registered</option>
+              <option value="interested" ${s.status==='interested'?'selected':''}>Interested</option>
+              <option value="registered" ${s.status==='registered'?'selected':''}>Registered</option>
+              <option value="attended" ${s.status==='attended'?'selected':''}>Attended</option>
+            </select>
+          </td>
+          <td class="no-print">
+            <div class="row-actions">
+              <button class="btn ghost sm" onclick="openAssignShowModal('${s.id}')">Send to…</button>
+              <button class="btn ghost sm" onclick="deleteShow('${s.id}')">Remove</button>
+            </div>
+          </td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>`;
+}
+async function updateShowStatus(id, status) {
+  try {
+    const updated = await fetchJson(MLF_WORKER_URL + '/shows/' + id, { method: 'PATCH', headers: mlfHeaders(), body: JSON.stringify({ status }) });
+    shows = shows.map(s => s.id === id ? updated : s);
+    renderShows();
+  } catch (e) { toast('Update failed: ' + e.message); }
+}
+async function deleteShow(id) {
+  if (!confirm('Remove this show?')) return;
+  try {
+    await fetchJson(MLF_WORKER_URL + '/shows/' + id, { method: 'DELETE', headers: mlfHeaders() });
+    shows = shows.filter(s => s.id !== id);
+    renderShows();
+    toast('Show removed');
+  } catch (e) { toast('Remove failed: ' + e.message); }
+}
+
+// ============ AI-POWERED SHOW SEARCH ============
+async function findShows() {
+  const btn = document.getElementById('show-search-btn');
+  const progress = document.getElementById('show-search-progress');
+  const progressText = document.getElementById('show-search-progress-text');
+  const errorBox = document.getElementById('show-search-error');
+  const keyword = document.getElementById('sf-show-keyword').value.trim();
+
+  btn.disabled = true;
+  progress.classList.add('active');
+  errorBox.classList.remove('active');
+  progressText.textContent = 'Searching the web…';
+
+  const knownNames = new Set(shows.map(s => s.name.toLowerCase()));
+
+  const system = 'You help a commercial furniture manufacturer (Modern Line Furniture — custom seating, tables, booths, lounge furniture for restaurants, hotels and hospitality spaces, made in the USA) find real trade shows and industry events worth exhibiting at or attending. ' +
+    'Search the web and return ONLY a JSON array (no prose, no markdown). Each item MUST have: {name, dates (real, current or next known edition — say "unconfirmed, verify with organizers" if you cannot find a real date), location, why (1 sentence), applyUrl (a real URL to the exhibitor/apply page, or the show\'s main site if no dedicated page exists)}. ' +
+    'Only include REAL, currently-operating shows — never invent a name or URL. Return 4-8 items.';
+  const userMsg = 'Find trade shows and industry events relevant to restaurant, hospitality, or contract furniture manufacturers' +
+    (keyword ? (', with a focus on: ' + keyword) : '') +
+    '. Prioritize shows not already in this list: ' + Array.from(knownNames).join(', ') +
+    '\n\nSearch the web and return the JSON array only.';
+
+  const budgets = [5, 3];
+  let items = [];
+  let lastErr = null;
+  for (let attempt = 0; attempt < budgets.length; attempt++) {
+    try {
+      progressText.textContent = attempt === 0 ? 'Searching the web…' : 'Retrying with a smaller search budget…';
+      const res = await fetchJson(AI_WORKER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          _accessCode: AI_WORKER_AUTH,
+          model: 'claude-sonnet-4-5',
+          max_tokens: 2500,
+          system,
+          tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: budgets[attempt] }],
+          messages: [{ role: 'user', content: userMsg }],
+        }),
+        timeoutMs: 90000,
+      });
+      let combined = '';
+      for (const b of (res.content || [])) if (b.type === 'text') combined += b.text;
+      items = extractJsonArray(combined);
+      break;
+    } catch (e) {
+      lastErr = e;
+      console.warn('[ShowFinder] attempt failed:', e.message);
+    }
+  }
+
+  progress.classList.remove('active');
+  btn.disabled = false;
+
+  if (!items.length) {
+    errorBox.textContent = lastErr ? ('Search failed: ' + lastErr.message) : 'No results — try a different focus.';
+    errorBox.classList.add('active');
+    return;
+  }
+
+  const fresh = items.filter(it => it.name && !knownNames.has(String(it.name).toLowerCase()));
+  const dupCount = items.length - fresh.length;
+  if (fresh.length) {
+    const payload = fresh.map(it => ({
+      name: it.name, dates: it.dates || 'unconfirmed, verify with organizers', location: it.location || '',
+      why: it.why || '', applyUrl: it.applyUrl || '', source: 'ai-search',
+    }));
+    try {
+      const res = await fetchJson(MLF_WORKER_URL + '/shows', { method: 'POST', headers: mlfHeaders(), body: JSON.stringify(payload) });
+      shows = res.shows.concat(shows);
+    } catch (e) { toast('Found shows but failed to save: ' + e.message); }
+  }
+  renderShows();
+  toast(fresh.length + ' new show' + (fresh.length === 1 ? '' : 's') + ' added' + (dupCount ? (' (' + dupCount + ' already tracked)') : ''));
+}
+
+// ============ ASSIGN A SHOW ============
+let assignShowTargetId = null;
+function openAssignShowModal(id) {
+  assignShowTargetId = id;
+  const s = shows.find(x => x.id === id); if (!s) return;
+  document.getElementById('assign-show-preview').innerHTML = '<b>' + esc(s.name) + '</b> — ' + esc(s.dates);
+  const sel = document.getElementById('asf-employee');
+  sel.innerHTML = employees.map(e => `<option value="${e.id}" data-name="${esc(e.name)}" ${s.assignedTo === e.id ? 'selected' : ''}>${esc(e.name)}${e.id === session.id ? ' (you)' : ''}</option>`).join('');
+  document.getElementById('asf-note').value = s.assignNote || '';
+  openModal('assign-show-modal');
+}
+async function submitAssignShowForm(evt) {
+  evt.preventDefault();
+  const sel = document.getElementById('asf-employee');
+  const empId = sel.value;
+  const empName = sel.selectedOptions[0].dataset.name;
+  const note = document.getElementById('asf-note').value.trim();
+  try {
+    const updated = await fetchJson(MLF_WORKER_URL + '/shows/' + assignShowTargetId, {
+      method: 'PATCH', headers: mlfHeaders(),
+      body: JSON.stringify({ assignedTo: empId, assignedToName: empName, assignNote: note, assignedBy: session.id }),
+    });
+    shows = shows.map(s => s.id === assignShowTargetId ? updated : s);
+    renderShows();
+    closeModal('assign-show-modal');
+    toast('Sent to ' + empName);
+  } catch (e) { toast('Send failed: ' + e.message); }
+}
 function renderStats() {
   document.getElementById('stat-total').textContent = leads.length;
   document.getElementById('stat-mine').textContent = leads.filter(l => l.assignedTo === session.id).length;
