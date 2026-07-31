@@ -120,6 +120,7 @@
   .cat-wholesaler { background: var(--olive-bg); color: var(--olive); }
   .cat-dealer { background: var(--gold-bg); color: var(--gold); }
   .cat-other { background: var(--bg-3); color: var(--text-mute); border: 1px solid var(--line-2); }
+  .cat-manufacturer { background: var(--terracotta-bg); color: var(--terracotta); }
   select.status-select { font-size: 12px; padding: 5px 8px; border-radius: 6px; font-weight: 600; }
   .status-new, .status-assigned { background: var(--bg-3); color: var(--text-dim); }
   .status-contacted { background: var(--gold-bg); color: var(--gold); }
@@ -245,7 +246,7 @@
 
     <div class="panel search-panel no-print">
       <h2>Find new leads</h2>
-      <div class="sub">Searches the web live for real, currently operating companies — reps, dealers, and wholesalers who could carry Modern Line as an additional brand.</div>
+      <div class="sub">Searches the web live for real, currently operating companies — reps, dealers, and wholesalers who could carry Modern Line as an additional brand, or peer/partner manufacturers for referrals and representation deals.</div>
       <div class="search-row">
         <div class="field">
           <label>Category</label>
@@ -254,6 +255,7 @@
             <option value="multi-brand furniture wholesalers and distributors">Multi-brand wholesalers</option>
             <option value="restaurant and hospitality furniture dealers">Restaurant/hospitality dealers</option>
             <option value="foodservice equipment distributors that also sell furniture">Foodservice distributors</option>
+            <option value="commercial/contract/hospitality furniture manufacturers (potential partner manufacturer)">Partner manufacturers</option>
           </select>
         </div>
         <div class="field">
@@ -726,23 +728,40 @@ function exportShowsToExcel() {
 // ============ RENDER ============
 function esc(s) { return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-// Pull an email/phone out of the freeform contact string so we can offer one-tap
-// Call / Email actions without needing separate structured fields on the backend.
+// Pull an email/phone/first-name out of the freeform contact string so we can offer
+// one-tap Call / Email actions without needing separate structured fields on the backend.
 function parseContact(contact) {
   const c = String(contact || '');
   const email = (c.match(/[\w.+-]+@[\w-]+\.[\w.-]+/) || [])[0] || '';
   const phone = (c.match(/(\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/) || [])[0] || '';
-  return { email, phone };
+  const nameMatch = c.match(/Ask for:\s*([^,·]+)/);
+  const firstName = nameMatch ? nameMatch[1].trim().split(/\s+/)[0] : '';
+  return { email, phone, firstName };
 }
-function gmailComposeUrl(to, subject) {
-  return 'https://mail.google.com/mail/?view=cm&fs=1&to=' + encodeURIComponent(to) + '&su=' + encodeURIComponent(subject);
+// The default draft that opens when Email is clicked -- meant for the "called, no
+// answer, follow up right away" flow, so it has to stand on its own with no editing.
+function pitchEmailBody(lead) {
+  const { firstName } = parseContact(lead.contact);
+  const greeting = firstName ? ('Hi ' + firstName + ',') : 'Hi,';
+  const intro = 'My name is Vlad Spivak with Modern Line Furniture — we manufacture custom commercial furniture (seating, tables, booths, lounge furniture) for restaurants, hotels, and hospitality spaces, made in the USA.';
+  const ask = lead.category === 'manufacturer'
+    ? 'I came across ' + lead.company + ' and think there could be a good fit for us to work together — whether that\'s referring overflow projects to each other, teaming up on larger bids, or, if you\'re looking to grow your US presence, us helping represent your line here.'
+    : 'I wanted to reach out because ' + lead.company + ' looks like a great fit to carry our line alongside what you already offer your customers.';
+  const close = 'Would you have 15 minutes for a quick call this week to see if it makes sense? I just tried calling — happy to work around your schedule.';
+  const sig = 'Best,\nVlad Spivak\nModern Line Furniture\nModernLineFurniture.com\n917-373-3497 (call or text)';
+  return [greeting, '', intro, '', ask, '', close, '', sig].join('\n');
 }
-function renderContactCell(contact, company) {
+function gmailComposeUrl(to, subject, body) {
+  return 'https://mail.google.com/mail/?view=cm&fs=1&to=' + encodeURIComponent(to) +
+    '&su=' + encodeURIComponent(subject) + (body ? '&body=' + encodeURIComponent(body) : '');
+}
+function renderContactCell(lead) {
+  const contact = lead.contact;
   if (!contact) return '<span style="color:var(--text-mute)">—</span>';
   const { email, phone } = parseContact(contact);
   const actions = [];
   if (phone) actions.push(`<a class="btn ghost sm" href="tel:${phone.replace(/[^\d+]/g, '')}">Call</a>`);
-  if (email) actions.push(`<a class="btn ghost sm" href="${gmailComposeUrl(email, 'Modern Line Furniture — ' + company)}" target="_blank" rel="noopener">Email</a>`);
+  if (email) actions.push(`<a class="btn ghost sm" href="${gmailComposeUrl(email, 'Modern Line Furniture — ' + lead.company, pitchEmailBody(lead))}" target="_blank" rel="noopener">Email</a>`);
   return esc(contact) + (actions.length ? `<div class="contact-actions">${actions.join('')}</div>` : '');
 }
 
@@ -976,7 +995,7 @@ function renderLeads() {
           <td><span class="cat-pill cat-${esc(l.category)}">${esc(l.category)}</span></td>
           <td class="lead-territory">${esc(l.territory)}</td>
           <td class="lead-why">${esc(l.why)}</td>
-          <td class="lead-contact">${renderContactCell(l.contact, l.company)}</td>
+          <td class="lead-contact">${renderContactCell(l)}</td>
           <td>
             <select class="status-select status-${esc(l.status)}" onchange="updateStatus('${l.id}', this.value)">
               <option value="new" ${l.status==='new'?'selected':''}>New</option>
@@ -1108,15 +1127,20 @@ async function findLeads() {
   progressText.textContent = 'Searching the web…';
 
   const knownSites = new Set(leads.map(l => (l.website || '').toLowerCase().replace(/\/$/, '')));
+  const isManufacturerSearch = category.indexOf('partner manufacturer') >= 0;
 
-  const system = 'You are a B2B partnerships researcher helping a commercial furniture manufacturer (Modern Line Furniture — custom seating, tables, booths, lounge furniture for restaurants, hotels and hospitality spaces, made in the USA, NJ-based) find real, currently-operating companies to pitch as sales/distribution partners. ' +
+  const system = 'You are a B2B partnerships researcher helping a commercial furniture manufacturer (Modern Line Furniture — custom seating, tables, booths, lounge furniture for restaurants, hotels and hospitality spaces, made in the USA, NJ-based) find real, currently-operating companies to pitch as business partners. ' +
     'Search the web and return ONLY a JSON array (no prose, no markdown). Each item MUST have: {company, website, territory, why (1 sentence explaining the fit), contact}. ' +
     'For "contact", check the company\'s own site (About/Team/Contact pages) and build a single string combining whatever you can actually verify, in this exact order and format, omitting any piece you cannot find: "Ask for: <name>, <title> · <phone> · <email>". ' +
     'A phone number alone (e.g. the general office line) is still useful — always include one if the site publishes one, even without a named contact. Never invent a name, phone number, or email — leave contact as an empty string only if truly nothing is published. ' +
     'Only include REAL companies with an actual working website you can identify — never invent a company or URL. Return 6-10 items.';
-  const userMsg = 'Find ' + category + ' covering ' + region + (keyword ? (', specifically related to: ' + keyword) : '') +
-    ' who could plausibly add a new hospitality/restaurant furniture brand to their line card or catalog. Prioritize companies not already in this list of known sites: ' +
-    Array.from(knownSites).slice(0, 40).join(', ') + '\n\nSearch the web and return the JSON array only.';
+  const userMsg = isManufacturerSearch
+    ? 'Find ' + category + ' covering ' + region + (keyword ? (', specifically related to: ' + keyword) : '') +
+      '. Modern Line Furniture is looking for other furniture manufacturers as potential business allies — either (a) US-based peer manufacturers of similar size who could be referral partners or overflow-capacity subcontractors, or (b) manufacturers (often international, e.g. European) that make hospitality/contract furniture but do NOT yet have an established US sales/distribution presence, who might want Modern Line to represent or help distribute their line in the US. Say in "why" which of these two angles applies and briefly why. ' +
+      'Prioritize companies not already in this list of known sites: ' + Array.from(knownSites).slice(0, 40).join(', ') + '\n\nSearch the web and return the JSON array only.'
+    : 'Find ' + category + ' covering ' + region + (keyword ? (', specifically related to: ' + keyword) : '') +
+      ' who could plausibly add a new hospitality/restaurant furniture brand to their line card or catalog. Prioritize companies not already in this list of known sites: ' +
+      Array.from(knownSites).slice(0, 40).join(', ') + '\n\nSearch the web and return the JSON array only.';
 
   const budgets = [5, 3];
   let items = [];
@@ -1161,7 +1185,7 @@ async function findLeads() {
   if (fresh.length) {
     const payload = fresh.map(it => ({
       company: it.company || '(unnamed)', website: it.website || '',
-      category: category.includes('wholesaler') ? 'wholesaler' : category.includes('dealer') || category.includes('distributor') ? 'dealer' : 'rep',
+      category: isManufacturerSearch ? 'manufacturer' : category.includes('wholesaler') ? 'wholesaler' : category.includes('dealer') || category.includes('distributor') ? 'dealer' : 'rep',
       territory: it.territory || region, why: it.why || '', contact: it.contact || '', source: 'ai-search',
     }));
     try {
