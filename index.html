@@ -197,7 +197,7 @@
     </div>
 
     <div id="gate-pin" style="display:none">
-      <div id="pin-who" style="font-size:13px; color:var(--text-dim); margin-bottom:14px;"></div>
+      <div id="pin-who" style="font-size:13px; color:var(--text-dim); margin-bottom:14px;">Enter PIN</div>
       <div class="pin-dots" id="pin-dots"></div>
       <div class="pin-pad">
         <div class="pin-key" onclick="pinPress('1')">1</div>
@@ -213,7 +213,6 @@
         <div class="pin-key" onclick="pinPress('0')">0</div>
       </div>
       <div class="gate-err" id="gate-err"></div>
-      <span class="gate-back" onclick="backToPicker()">&larr; Choose a different name</span>
     </div>
   </div>
 </div>
@@ -542,7 +541,6 @@ let leads = [];
 let shows = [];
 let currentFilter = 'all';
 let pendingPin = '';
-let pinTargetEmployee = null;
 
 function loadSession() {
   try { return JSON.parse(localStorage.getItem(SESSION_KEY)); } catch (e) { return null; }
@@ -581,7 +579,16 @@ async function boot() {
     enterApp();
   } else {
     clearSession();
-    renderGatePicker();
+    // Accounts already exist for everyone who needs one -- skip the name
+    // picker and go straight to a PIN pad. The PIN alone resolves who's
+    // logging in (see /mlf/employees/login-by-pin). Only fall back to the
+    // "create the first account" form on a genuine cold start (zero
+    // employees on the backend).
+    if (employees.length) {
+      renderPinGate();
+    } else {
+      renderGatePicker();
+    }
   }
 }
 
@@ -590,18 +597,15 @@ function renderGatePicker() {
   const noEmp = document.getElementById('no-employees');
   document.getElementById('gate-picker').style.display = 'block';
   document.getElementById('gate-pin').style.display = 'none';
-  if (!employees.length) {
-    list.innerHTML = '';
-    noEmp.style.display = 'block';
-    return;
-  }
-  noEmp.style.display = 'none';
-  list.innerHTML = employees.map(e => `
-    <div class="emp-card" onclick="selectEmployeeForLogin('${e.id}')">
-      <div class="emp-avatar">${esc(e.name[0].toUpperCase())}</div>
-      <div><div class="emp-name">${esc(e.name)}</div><div class="emp-role">${esc(e.role)}</div></div>
-    </div>
-  `).join('');
+  list.innerHTML = '';
+  noEmp.style.display = 'block';
+}
+function renderPinGate() {
+  pendingPin = '';
+  document.getElementById('gate-picker').style.display = 'none';
+  document.getElementById('gate-pin').style.display = 'block';
+  document.getElementById('gate-err').textContent = '';
+  renderPinDots();
 }
 async function createFirstOwner() {
   const name = document.getElementById('setup-name').value.trim();
@@ -627,19 +631,6 @@ async function createFirstOwner() {
     btn.disabled = false; btn.textContent = 'Create account';
   }
 }
-function selectEmployeeForLogin(id) {
-  pinTargetEmployee = employees.find(e => e.id === id);
-  pendingPin = '';
-  document.getElementById('gate-picker').style.display = 'none';
-  document.getElementById('gate-pin').style.display = 'block';
-  document.getElementById('pin-who').textContent = 'Enter PIN for ' + pinTargetEmployee.name;
-  document.getElementById('gate-err').textContent = '';
-  renderPinDots();
-}
-function backToPicker() {
-  document.getElementById('gate-picker').style.display = 'block';
-  document.getElementById('gate-pin').style.display = 'none';
-}
 function renderPinDots() {
   document.getElementById('pin-dots').innerHTML = [0,1,2,3].map(i => `<div class="pin-dot ${i < pendingPin.length ? 'filled' : ''}"></div>`).join('');
 }
@@ -652,8 +643,8 @@ function pinPress(d) {
 function pinBackspace() { pendingPin = pendingPin.slice(0, -1); renderPinDots(); }
 async function attemptLogin() {
   try {
-    const emp = await fetchJson(MLF_WORKER_URL + '/employees/login', {
-      method: 'POST', headers: mlfHeaders(), body: JSON.stringify({ id: pinTargetEmployee.id, pin: pendingPin }), timeoutMs: 15000,
+    const emp = await fetchJson(MLF_WORKER_URL + '/employees/login-by-pin', {
+      method: 'POST', headers: mlfHeaders(), body: JSON.stringify({ pin: pendingPin }), timeoutMs: 15000,
     });
     session = emp; saveSession(session);
     enterApp();
@@ -664,7 +655,12 @@ async function attemptLogin() {
   }
 }
 function showGateError(msg) { const el = document.getElementById('gate-err'); if (el) el.textContent = msg; }
-function logout() { clearSession(); session = null; document.getElementById('app').classList.remove('active'); document.getElementById('gate').style.display = 'flex'; renderGatePicker(); }
+function logout() {
+  clearSession(); session = null;
+  document.getElementById('app').classList.remove('active');
+  document.getElementById('gate').style.display = 'flex';
+  if (employees.length) renderPinGate(); else renderGatePicker();
+}
 
 async function enterApp() {
   document.getElementById('gate').style.display = 'none';
