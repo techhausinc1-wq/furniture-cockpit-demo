@@ -101,6 +101,9 @@
   .toolbar .spacer { flex: 1; }
   .filter-chip { font-size: 12px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--bg-3); color: var(--text-dim); cursor: pointer; }
   .filter-chip.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+  .region-chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .region-chip { font-size: 11.5px; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line-2); background: transparent; color: var(--text-mute); cursor: pointer; }
+  .region-chip:hover { background: var(--bg-3); color: var(--text-dim); }
 
   table.leads { width: 100%; border-collapse: collapse; background: var(--bg-2); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
   table.leads th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-mute); padding: 10px 14px; background: var(--bg-3); border-bottom: 1px solid var(--line); white-space: nowrap; }
@@ -159,6 +162,10 @@
   .team-row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: var(--bg-3); border-radius: 8px; }
   .team-row .name { font-weight: 700; font-size: 13px; flex: 1; }
   .team-row .role { font-size: 11px; color: var(--text-mute); text-transform: capitalize; }
+  .invite-card { background: var(--bg-3); border: 1px solid var(--line-2); border-radius: 8px; padding: 14px; margin-bottom: 14px; }
+  .invite-card .t { font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+  .invite-card .s { font-size: 12px; color: var(--text-mute); margin-bottom: 10px; }
+  .invite-card .actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
   footer.pagefoot { padding: 18px 28px; text-align: center; font-size: 11.5px; color: var(--text-mute); border-top: 1px solid var(--line); }
 
@@ -225,6 +232,7 @@
     <div class="spacer"></div>
     <button class="btn ghost sm no-print" onclick="openTeamModal()">Team</button>
     <button class="btn ghost sm no-print" onclick="exportLeadsToExcel()">Export to Excel</button>
+    <button class="btn ghost sm no-print" id="sheet-btn-leads" onclick="exportToSheet('leads')">Export to Google Sheet</button>
     <button class="btn ghost sm no-print" onclick="window.print()">Print / Export PDF</button>
     <div class="user-chip"><div class="user-avatar" id="user-avatar">?</div><span id="user-name"></span></div>
     <span class="logout-btn no-print" onclick="logout()">Log out</span>
@@ -267,6 +275,7 @@
         </div>
         <button class="btn primary" id="search-btn" onclick="findLeads()">Search</button>
       </div>
+      <div class="region-chip-row" id="region-chip-row"></div>
       <div class="progress-note" id="search-progress"><div class="spin"></div><span id="search-progress-text">Searching the web…</span></div>
       <div class="error-note" id="search-error"></div>
     </div>
@@ -292,6 +301,7 @@
           <div class="sub">Industry events where reps, dealers, and hospitality buyers actually meet manufacturers — exhibiting or just attending is its own lead-gen channel.</div>
         </div>
         <button class="btn ghost sm" style="flex-shrink:0" onclick="exportShowsToExcel()">Export to Excel</button>
+        <button class="btn ghost sm" style="flex-shrink:0" id="sheet-btn-shows" onclick="exportToSheet('shows')">Export to Google Sheet</button>
       </div>
       <div class="search-row">
         <div class="field">
@@ -403,10 +413,12 @@
       <span class="modal-close" onclick="closeModal('team-modal')">&times;</span>
     </div>
     <div class="team-list" id="team-list"></div>
+    <div id="invite-card" style="display:none"></div>
     <form id="team-form" onsubmit="submitAddEmployee(event)">
       <div class="form-grid">
         <div><label>Name</label><input type="text" id="tf-name" required></div>
         <div><label>4-digit PIN</label><input type="text" id="tf-pin" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required placeholder="e.g. 5678"></div>
+        <div><label>Email (optional)</label><input type="email" id="tf-email" placeholder="for the invite email"></div>
       </div>
       <div class="form-actions">
         <button type="submit" class="btn primary full">Add team member</button>
@@ -667,6 +679,8 @@ async function enterApp() {
   document.getElementById('app').classList.add('active');
   document.getElementById('user-avatar').textContent = session.name[0].toUpperCase();
   document.getElementById('user-name').textContent = session.name;
+  renderRegionChips();
+  handleSheetRedirect();
   await Promise.all([reloadLeads(), reloadShows()]);
 }
 
@@ -719,6 +733,36 @@ function exportShowsToExcel() {
   ]);
   downloadCsv('modern-line-shows-' + new Date().toISOString().slice(0, 10) + '.csv', toCsv([headers, ...rows]));
   toast('Exported ' + rows.length + ' shows to Excel');
+}
+// One click -> Google's account picker -> a filled-in Sheet, no persistent
+// connection kept on our end. kind is 'leads' or 'shows'.
+async function exportToSheet(kind) {
+  const btn = document.getElementById('sheet-btn-' + kind);
+  const original = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Opening Google…';
+  try {
+    const res = await fetchJson(MLF_WORKER_URL + '/sheets/auth?type=' + kind, { headers: mlfHeaders(), timeoutMs: 15000 });
+    window.location.href = res.url;
+  } catch (e) {
+    toast('Could not start Google sign-in: ' + e.message);
+    btn.disabled = false; btn.textContent = original;
+  }
+}
+// Picks up the ?sheet_url=...  /  ?sheet_error=... the backend appends after
+// the OAuth round-trip completes, shows the result, then cleans the URL so a
+// page refresh doesn't re-show a stale message.
+function handleSheetRedirect() {
+  const params = new URLSearchParams(window.location.search);
+  const sheetUrl = params.get('sheet_url');
+  const sheetError = params.get('sheet_error');
+  if (!sheetUrl && !sheetError) return;
+  if (sheetUrl) {
+    toastHtml('Sheet ready — <a href="' + esc(sheetUrl) + '" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline;">open it</a>');
+  } else {
+    toast('Google Sheet export failed: ' + sheetError);
+  }
+  const cleanUrl = window.location.pathname;
+  window.history.replaceState({}, '', cleanUrl);
 }
 
 // ============ RENDER ============
@@ -1100,6 +1144,31 @@ async function verifyLead(id) {
   }
 }
 
+// ============ REGION QUICK-SELECT ============
+// Grouped the way furniture reps actually carve up territory (matches the
+// multi-state groupings already seen in the seed lead data), not just a
+// state picker -- one click covers what a rep firm would call "my territory."
+const REGION_PRESETS = [
+  'Northeast (CT, ME, MA, NH, RI, VT, NY)',
+  'Mid-Atlantic (NY, NJ, PA, DE, MD, VA, DC, WV)',
+  'Southeast (FL, GA, SC, NC, TN, AL, MS)',
+  'Midwest (OH, IN, IL, MI, WI, MN, IA, MO)',
+  'Southwest (TX, OK, NM, AZ)',
+  'West Coast (CA, OR, WA)',
+  'Pacific Northwest (WA, OR, ID)',
+  'Nationwide',
+];
+function renderRegionChips() {
+  const row = document.getElementById('region-chip-row');
+  if (!row) return;
+  row.innerHTML = REGION_PRESETS.map(r =>
+    `<button type="button" class="region-chip" onclick="pickRegion('${r.replace(/'/g, "\\'")}')">${esc(r)}</button>`
+  ).join('');
+}
+function pickRegion(region) {
+  document.getElementById('sf-region').value = region;
+}
+
 // ============ AI-POWERED LEAD SEARCH ============
 function extractJsonArray(text) {
   if (!text) return [];
@@ -1216,21 +1285,50 @@ async function submitLeadForm(evt) {
 }
 
 // ============ TEAM ============
-function openTeamModal() {
+function renderTeamList() {
   document.getElementById('team-list').innerHTML = employees.map(e => `
     <div class="team-row"><div class="name">${esc(e.name)}</div><div class="role">${esc(e.role)}</div></div>
   `).join('');
+}
+function openTeamModal() {
+  renderTeamList();
   document.getElementById('team-form').reset();
+  document.getElementById('invite-card').style.display = 'none';
   openModal('team-modal');
+}
+function inviteText(name, pin) {
+  return 'Hi ' + name + ' — here\'s access to the Modern Line Furniture lead + show tracker:\n\n' +
+    'https://techhausinc1-wq.github.io/furniture-cockpit-demo/\n\n' +
+    'Enter PIN ' + pin + ' to log in — that\'s it, no username or password needed.';
+}
+function copyInvite(name, pin) {
+  navigator.clipboard.writeText(inviteText(name, pin)).then(
+    () => toast('Invite copied — paste it into a text or email'),
+    () => toast('Could not copy — select and copy the text manually'),
+  );
 }
 async function submitAddEmployee(evt) {
   evt.preventDefault();
   const name = document.getElementById('tf-name').value.trim();
   const pin = document.getElementById('tf-pin').value.trim();
+  const email = document.getElementById('tf-email').value.trim();
   try {
-    const emp = await fetchJson(MLF_WORKER_URL + '/employees', { method: 'POST', headers: mlfHeaders(), body: JSON.stringify({ name, pin, role: 'employee' }), timeoutMs: 15000 });
+    const emp = await fetchJson(MLF_WORKER_URL + '/employees', { method: 'POST', headers: mlfHeaders(), body: JSON.stringify({ name, pin, email, role: 'employee' }), timeoutMs: 15000 });
     employees.push(emp);
-    openTeamModal();
+    renderTeamList();
+    document.getElementById('team-form').reset();
+    const card = document.getElementById('invite-card');
+    const emailBtn = email
+      ? `<a class="btn ghost sm" href="${gmailComposeUrl(email, 'Modern Line Furniture — your login', inviteText(name, pin))}" target="_blank" rel="noopener">Email invite</a>`
+      : '';
+    card.innerHTML = `
+      <div class="t">${esc(name)} added — send them access</div>
+      <div class="s">PIN ${esc(pin)}. Nothing else to set up on their end.</div>
+      <div class="actions">
+        <button type="button" class="btn ghost sm" onclick="copyInvite('${name.replace(/'/g, "\\'")}', '${pin}')">Copy invite text</button>
+        ${emailBtn}
+      </div>`;
+    card.style.display = 'block';
     toast(name + ' added to the team');
   } catch (e) { toast('Add failed: ' + e.message); }
 }
@@ -1245,6 +1343,16 @@ function toast(msg) {
   el.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('show'), 3200);
+}
+// Same as toast() but allows a link inside -- used only for the "Sheet
+// ready, open it" message, and given a longer timeout since it's
+// click-through rather than read-only.
+function toastHtml(html) {
+  const el = document.getElementById('toast');
+  el.innerHTML = html;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 10000);
 }
 
 boot();
