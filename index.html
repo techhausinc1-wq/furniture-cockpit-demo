@@ -113,6 +113,13 @@
   .lead-name { font-weight: 700; color: var(--ink); }
   .lead-name a { text-decoration: none; color: inherit; border-bottom: 1px solid var(--line-2); }
   .lead-name a:hover { border-color: var(--navy); color: var(--navy); }
+  .lead-name-link { cursor: pointer; border-bottom: 1px solid var(--line-2); }
+  .lead-name-link:hover { border-color: var(--navy); color: var(--navy); }
+  .lead-site-link { font-size: 12px; text-decoration: none; color: var(--text-mute); border-bottom: none !important; }
+  .lead-site-link:hover { color: var(--navy); }
+  .detail-body { display: flex; flex-direction: column; gap: 12px; margin: 4px 0 16px; }
+  .detail-row label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-mute); font-weight: 700; margin-bottom: 3px; }
+  .detail-row div { font-size: 13.5px; color: var(--ink); line-height: 1.5; }
   .lead-territory { font-size: 11.5px; color: var(--terracotta); font-weight: 600; }
   .lead-why { font-size: 12.5px; color: var(--text-dim); max-width: 280px; }
   .lead-contact { font-size: 12px; color: var(--text-dim); }
@@ -139,6 +146,7 @@
   .assign-badge { margin-top: 6px; font-size: 11.5px; background: var(--terracotta-bg); color: var(--terracotta); padding: 5px 9px; border-radius: 6px; font-weight: 600; }
   .assign-note-text { display: block; font-weight: 400; color: var(--ink-2); margin-top: 2px; font-style: italic; }
   .row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .row-actions .btn { white-space: nowrap; }
 
   .empty { text-align: center; padding: 60px 20px; color: var(--text-mute); }
   .empty .big { font-size: 16px; color: var(--ink-2); margin-bottom: 6px; font-weight: 600; }
@@ -321,6 +329,19 @@
 </div>
 
 <!-- ============ ADD / EDIT LEAD MODAL ============ -->
+<div class="modal-overlay" id="lead-detail-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">Lead details</div>
+      <span class="modal-close" onclick="closeModal('lead-detail-modal')">&times;</span>
+    </div>
+    <div id="lead-detail-body" class="detail-body"></div>
+    <div class="form-actions">
+      <button type="button" class="btn ghost" onclick="closeModal('lead-detail-modal')">Close</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="lead-modal">
   <div class="modal">
     <div class="modal-head">
@@ -553,6 +574,7 @@ let leads = [];
 let shows = [];
 let currentFilter = 'all';
 let pendingPin = '';
+let selectedLeadIds = new Set();
 
 function loadSession() {
   try { return JSON.parse(localStorage.getItem(SESSION_KEY)); } catch (e) { return null; }
@@ -717,7 +739,9 @@ function downloadCsv(filename, csv) {
 }
 function exportLeadsToExcel() {
   const headers = ['Company', 'Website', 'Category', 'Territory', 'Why it fits', 'Contact', 'Status', 'Assigned to', 'Assign note', 'Verified', 'Notes', 'Source'];
-  const rows = leads.slice().sort((a, b) => a.company.localeCompare(b.company)).map(l => [
+  // Export just the checked rows if any are checked; otherwise export everything, same as before.
+  const source = selectedLeadIds.size ? leads.filter(l => selectedLeadIds.has(l.id)) : leads;
+  const rows = source.slice().sort((a, b) => a.company.localeCompare(b.company)).map(l => [
     l.company, l.website, l.category, l.territory, l.why, l.contact, l.status,
     l.assignedToName || '', l.assignNote || '',
     l.verified ? (l.verified.ok ? 'Verified ' + l.verified.date : 'Flagged ' + l.verified.date) : '',
@@ -738,16 +762,28 @@ function exportShowsToExcel() {
 // connection kept on our end. kind is 'leads' or 'shows'.
 async function exportToSheet(kind) {
   const btn = document.getElementById('sheet-btn-' + kind);
-  const original = btn.textContent;
   btn.disabled = true; btn.textContent = 'Opening Google…';
   try {
     const res = await fetchJson(MLF_WORKER_URL + '/sheets/auth?type=' + kind, { headers: mlfHeaders(), timeoutMs: 15000 });
     window.location.href = res.url;
   } catch (e) {
     toast('Could not start Google sign-in: ' + e.message);
-    btn.disabled = false; btn.textContent = original;
+    resetSheetButtons();
   }
 }
+function resetSheetButtons() {
+  const leadsBtn = document.getElementById('sheet-btn-leads');
+  if (leadsBtn) { leadsBtn.disabled = false; leadsBtn.textContent = 'Export to Google Sheet'; }
+  const showsBtn = document.getElementById('sheet-btn-shows');
+  if (showsBtn) { showsBtn.disabled = false; showsBtn.textContent = 'Export to Google Sheet'; }
+}
+// If the user navigates to Google then hits Back instead of finishing the
+// OAuth flow, the browser can restore this page from bfcache with the
+// button frozen mid-click ("Opening Google…", disabled forever) since we
+// navigated away before any code ran to reset it. pageshow with
+// event.persisted covers exactly that restore; also safe to just always
+// reset on pageshow since a fresh load never has stuck buttons anyway.
+window.addEventListener('pageshow', resetSheetButtons);
 // Picks up the ?sheet_url=...  /  ?sheet_error=... the backend appends after
 // the OAuth round-trip completes, shows the result, then cleans the URL so a
 // page refresh doesn't re-show a stale message.
@@ -1020,15 +1056,20 @@ function renderLeads() {
     return;
   }
 
+  const shownIds = new Set(shown.map(l => l.id));
+  for (const id of Array.from(selectedLeadIds)) if (!shownIds.has(id)) selectedLeadIds.delete(id);
+  const allShownSelected = shown.length > 0 && shown.every(l => selectedLeadIds.has(l.id));
   wrap.innerHTML = `<table class="leads">
     <thead><tr>
+      <th class="no-print"><input type="checkbox" ${allShownSelected ? 'checked' : ''} onchange="toggleSelectAllLeads(this.checked)" title="Select all"></th>
       <th>Company</th><th>Category</th><th>Territory</th><th>Why it fits</th><th>Contact</th><th>Status</th><th class="no-print">Actions</th>
     </tr></thead>
     <tbody>
       ${shown.map(l => `
         <tr>
+          <td class="no-print"><input type="checkbox" class="lead-checkbox" ${selectedLeadIds.has(l.id) ? 'checked' : ''} onchange="toggleLeadSelection('${l.id}', this.checked)"></td>
           <td>
-            <div class="lead-name">${l.website ? `<a href="${esc(l.website)}" target="_blank" rel="noopener">${esc(l.company)}</a>` : esc(l.company)}</div>
+            <div class="lead-name"><span class="lead-name-link" onclick="openLeadDetail('${l.id}')">${esc(l.company)}</span>${l.website ? ` <a href="${esc(l.website)}" target="_blank" rel="noopener" class="lead-site-link" title="Visit website" onclick="event.stopPropagation()">↗</a>` : ''}</div>
             ${l.verified ? `<span class="verify-badge verify-${l.verified.ok ? 'live' : 'stale'}">${l.verified.ok ? 'Verified ' + esc(l.verified.date) : 'Flagged ' + esc(l.verified.date)}</span>` : ''}
             ${l.assignedTo ? `<div class="assign-badge">→ ${esc(l.assignedToName)}${l.assignNote ? `<span class="assign-note-text">"${esc(l.assignNote)}"</span>` : ''}</div>` : ''}
           </td>
@@ -1062,6 +1103,43 @@ function setFilter(f) {
   currentFilter = f;
   document.querySelectorAll('.filter-chip').forEach(c => c.classList.toggle('active', c.dataset.filter === f));
   renderLeads();
+}
+
+// ============ SELECTION (for Excel export) ============
+function toggleLeadSelection(id, checked) {
+  if (checked) selectedLeadIds.add(id); else selectedLeadIds.delete(id);
+  renderLeads();
+}
+function toggleSelectAllLeads(checked) {
+  let shown = leads.slice();
+  if (currentFilter === 'mine') shown = shown.filter(l => l.assignedTo === session.id);
+  else if (currentFilter !== 'all') shown = shown.filter(l => l.status === currentFilter);
+  shown.forEach(l => { if (checked) selectedLeadIds.add(l.id); else selectedLeadIds.delete(l.id); });
+  renderLeads();
+}
+
+// ============ LEAD DETAIL CARD ============
+// Clicking a company name used to just open its external site in a new tab
+// with no way to see the lead's full record in one place -- that link still
+// works (small ↗ icon), but the name itself now opens this in-app detail
+// view instead, since that's what people actually expect from a CRM row.
+function openLeadDetail(id) {
+  const l = leads.find(x => x.id === id);
+  if (!l) return;
+  const body = document.getElementById('lead-detail-body');
+  body.innerHTML = `
+    <div class="detail-row"><label>Company</label><div>${esc(l.company)}${l.website ? ` — <a href="${esc(l.website)}" target="_blank" rel="noopener">${esc(l.website)} ↗</a>` : ''}</div></div>
+    <div class="detail-row"><label>Category</label><div><span class="cat-pill cat-${esc(l.category)}">${esc(l.category)}</span></div></div>
+    <div class="detail-row"><label>Territory</label><div>${esc(l.territory)}</div></div>
+    <div class="detail-row"><label>Why it fits</label><div>${esc(l.why)}</div></div>
+    <div class="detail-row"><label>Contact</label><div>${renderContactCell(l)}</div></div>
+    <div class="detail-row"><label>Status</label><div>${esc(l.status)}</div></div>
+    ${l.assignedTo ? `<div class="detail-row"><label>Assigned to</label><div>${esc(l.assignedToName)}${l.assignNote ? ' — "' + esc(l.assignNote) + '"' : ''}</div></div>` : ''}
+    ${l.verified ? `<div class="detail-row"><label>Verified</label><div>${l.verified.ok ? 'Yes, ' + esc(l.verified.date) : 'Flagged, ' + esc(l.verified.date)}</div></div>` : ''}
+    ${l.notes ? `<div class="detail-row"><label>Notes</label><div>${esc(l.notes)}</div></div>` : ''}
+    <div class="detail-row"><label>Source</label><div>${esc(l.source)}</div></div>
+  `;
+  openModal('lead-detail-modal');
 }
 
 // ============ LEAD ACTIONS ============
