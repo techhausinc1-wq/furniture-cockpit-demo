@@ -58,7 +58,8 @@
   #app { display: none; flex-direction: column; min-height: 100vh; }
   #app.active { display: flex; }
   header.top { background: var(--bg-2); border-bottom: 1px solid var(--line); padding: 16px 28px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-  header.top .brand { font-family: 'Lora', serif; font-weight: 600; font-size: 18px; color: var(--navy); }
+  header.top .brand { font-family: 'Lora', serif; font-weight: 600; font-size: 18px; color: var(--navy); cursor: pointer; }
+  header.top .brand:hover { opacity: 0.75; }
   header.top .brand span { color: var(--terracotta); }
   header.top .tag { font-size: 12px; color: var(--text-mute); }
   header.top .spacer { flex: 1; }
@@ -243,7 +244,7 @@
 <!-- ============ APP ============ -->
 <div id="app">
   <header class="top">
-    <div class="brand">Modern Line <span>Furniture</span></div>
+    <div class="brand" role="button" tabindex="0" onclick="goHome()" onkeydown="if(event.key==='Enter')goHome()" title="Back to Leads">Modern Line <span>Furniture</span></div>
     <div class="tag">Lead Finder — Partner &amp; Reseller Prospecting</div>
     <div class="spacer"></div>
     <a class="btn ghost sm no-print" href="https://techhausinc1-wq.github.io/furniture-cockpit-demo/manual.html" target="_blank" rel="noopener">Manual</a>
@@ -1159,6 +1160,15 @@ function switchTab(name) {
   document.getElementById('tab-shows').style.display = name === 'shows' ? '' : 'none';
   document.getElementById('tab-btn-leads').classList.toggle('active', name === 'leads');
   document.getElementById('tab-btn-shows').classList.toggle('active', name === 'shows');
+}
+// Clicking the "Modern Line Furniture" logo acts like a home button --
+// there's nowhere else to navigate to in a single-page tool, so "home" means
+// back to the default Leads view: all leads, no filter, scrolled to top.
+function goHome() {
+  document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active'));
+  switchTab('leads');
+  setFilter('all');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 function renderLeads() {
   const wrap = document.getElementById('leads-wrap');
