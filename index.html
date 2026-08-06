@@ -78,6 +78,8 @@
   .panel .sub { font-size: 12.5px; color: var(--text-mute); margin-bottom: 16px; }
 
   .search-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+  .daily-scout-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 14px 0; padding: 12px 14px; background: var(--terracotta-bg); border: 1px solid var(--terracotta); border-radius: 8px; }
+  .daily-scout-hint { font-size: 12px; color: var(--text-dim); }
   .field { display: flex; flex-direction: column; gap: 5px; }
   .field label { font-size: 11.5px; color: var(--text-mute); text-transform: uppercase; letter-spacing: .03em; font-weight: 600; }
   .field input, .field select { min-width: 170px; }
@@ -262,6 +264,10 @@
     <div class="panel search-panel no-print">
       <h2>Find new leads</h2>
       <div class="sub">Searches the web live for real, currently operating companies — reps, dealers, and wholesalers who could carry Modern Line as an additional brand, or peer/partner manufacturers for referrals and representation deals.</div>
+      <div class="daily-scout-row">
+        <button class="btn primary" id="daily-scout-btn" onclick="runDailyScout()">🔍 Daily Scout</button>
+        <span class="daily-scout-hint">Runs every category nationwide, skips anything already in your list, offers to export just today's finds to a Google Sheet.</span>
+      </div>
       <div class="search-row">
         <div class="field">
           <label>Category</label>
@@ -760,11 +766,16 @@ function exportShowsToExcel() {
 }
 // One click -> Google's account picker -> a filled-in Sheet, no persistent
 // connection kept on our end. kind is 'leads' or 'shows'.
-async function exportToSheet(kind) {
+async function exportToSheet(kind, ids) {
   const btn = document.getElementById('sheet-btn-' + kind);
   btn.disabled = true; btn.textContent = 'Opening Google…';
   try {
-    const res = await fetchJson(MLF_WORKER_URL + '/sheets/auth?type=' + kind, { headers: mlfHeaders(), timeoutMs: 15000 });
+    // Selected checkboxes scope the export to just those leads (e.g. "just
+    // today's new ones" from Daily Scout) -- same "if any selected, export
+    // just those, else export everything" pattern as the Excel export.
+    const scopeIds = ids || (kind === 'leads' && selectedLeadIds.size ? Array.from(selectedLeadIds) : null);
+    const idsQuery = scopeIds ? '&ids=' + scopeIds.join(',') : '';
+    const res = await fetchJson(MLF_WORKER_URL + '/sheets/auth?type=' + kind + idsQuery, { headers: mlfHeaders(), timeoutMs: 15000 });
     window.location.href = res.url;
   } catch (e) {
     toast('Could not start Google sign-in: ' + e.message);
@@ -1255,21 +1266,12 @@ function extractJsonArray(text) {
   if (start < 0 || end < 0) return [];
   try { return JSON.parse(text.slice(start, end + 1)); } catch (e) { return []; }
 }
-async function findLeads() {
-  const btn = document.getElementById('search-btn');
-  const progress = document.getElementById('search-progress');
-  const progressText = document.getElementById('search-progress-text');
-  const errorBox = document.getElementById('search-error');
-  const category = document.getElementById('sf-category').value;
-  const region = document.getElementById('sf-region').value.trim() || 'the United States';
-  const keyword = document.getElementById('sf-keyword').value.trim();
-
-  btn.disabled = true;
-  progress.classList.add('active');
-  errorBox.classList.remove('active');
-  progressText.textContent = 'Searching the web…';
-
-  const knownSites = new Set(leads.map(l => (l.website || '').toLowerCase().replace(/\/$/, '')));
+// Runs one category+region AI search, saves any genuinely new (non-duplicate,
+// checked against knownSites) results to the backend, and returns what it
+// found. knownSites is mutated in place with newly-saved sites so a caller
+// running several categories back-to-back (Daily Scout) doesn't re-suggest
+// the same company across categories within the same run.
+async function searchCategoryForLeads(category, region, keyword, knownSites, progressText) {
   const isManufacturerSearch = category.indexOf('partner manufacturer') >= 0;
 
   const system = 'You are a B2B partnerships researcher helping a commercial furniture manufacturer (Modern Line Furniture — custom seating, tables, booths, lounge furniture for restaurants, hotels and hospitality spaces, made in the USA, NJ-based) find real, currently-operating companies to pitch as business partners. ' +
@@ -1290,7 +1292,7 @@ async function findLeads() {
   let lastErr = null;
   for (let attempt = 0; attempt < budgets.length; attempt++) {
     try {
-      progressText.textContent = attempt === 0 ? 'Searching the web…' : 'Retrying with a smaller search budget…';
+      if (progressText) progressText.textContent = attempt === 0 ? 'Searching the web…' : 'Retrying with a smaller search budget…';
       const res = await fetchJson(AI_WORKER_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1314,17 +1316,13 @@ async function findLeads() {
     }
   }
 
-  progress.classList.remove('active');
-  btn.disabled = false;
-
   if (!items.length) {
-    errorBox.textContent = lastErr ? ('Search failed: ' + lastErr.message) : 'No results — try a broader region or different category.';
-    errorBox.classList.add('active');
-    return;
+    return { saved: [], rawCount: 0, dupCount: 0, error: lastErr ? lastErr.message : null };
   }
 
   const fresh = items.filter(it => it.website && !knownSites.has(String(it.website).toLowerCase().replace(/\/$/, '')));
   const dupCount = items.length - fresh.length;
+  let saved = [];
   if (fresh.length) {
     const payload = fresh.map(it => ({
       company: it.company || '(unnamed)', website: it.website || '',
@@ -1333,11 +1331,87 @@ async function findLeads() {
     }));
     try {
       const res = await fetchJson(MLF_WORKER_URL + '/leads', { method: 'POST', headers: mlfHeaders(), body: JSON.stringify(payload) });
-      leads = res.leads.concat(leads);
-    } catch (e) { toast('Found leads but failed to save: ' + e.message); }
+      saved = res.leads;
+      leads = saved.concat(leads);
+      saved.forEach(l => knownSites.add((l.website || '').toLowerCase().replace(/\/$/, '')));
+    } catch (e) {
+      return { saved: [], rawCount: items.length, dupCount, error: 'Found leads but failed to save: ' + e.message };
+    }
   }
+  return { saved, rawCount: items.length, dupCount, error: null };
+}
+
+async function findLeads() {
+  const btn = document.getElementById('search-btn');
+  const progress = document.getElementById('search-progress');
+  const progressText = document.getElementById('search-progress-text');
+  const errorBox = document.getElementById('search-error');
+  const category = document.getElementById('sf-category').value;
+  const region = document.getElementById('sf-region').value.trim() || 'the United States';
+  const keyword = document.getElementById('sf-keyword').value.trim();
+
+  btn.disabled = true;
+  progress.classList.add('active');
+  errorBox.classList.remove('active');
+  progressText.textContent = 'Searching the web…';
+
+  const knownSites = new Set(leads.map(l => (l.website || '').toLowerCase().replace(/\/$/, '')));
+  const result = await searchCategoryForLeads(category, region, keyword, knownSites, progressText);
+
+  progress.classList.remove('active');
+  btn.disabled = false;
+
+  if (!result.rawCount && !result.saved.length) {
+    errorBox.textContent = result.error ? ('Search failed: ' + result.error) : 'No results — try a broader region or different category.';
+    errorBox.classList.add('active');
+    return;
+  }
+  const fresh = result.saved, dupCount = result.dupCount;
   renderAll();
   toast(fresh.length + ' new lead' + (fresh.length === 1 ? '' : 's') + ' added' + (dupCount ? (' (' + dupCount + ' already in your list)') : ''));
+}
+
+// ============ DAILY SCOUT ============
+// One click, nationwide, across every category -- meant to run once a day
+// instead of manually picking a category+region each time. Dedupes against
+// existing leads (searchCategoryForLeads already does this), auto-selects
+// whatever's genuinely new so the Sheets export offer below is scoped to
+// just today's finds, not the whole list.
+const DAILY_SCOUT_CATEGORIES = [
+  'manufacturer\'s rep firms / contract furniture representatives',
+  'multi-brand furniture wholesalers and distributors',
+  'restaurant and hospitality furniture dealers',
+  'foodservice equipment distributors that also sell furniture',
+  'commercial/contract/hospitality furniture manufacturers (potential partner manufacturer)',
+];
+async function runDailyScout() {
+  const btn = document.getElementById('daily-scout-btn');
+  btn.disabled = true;
+  const knownSites = new Set(leads.map(l => (l.website || '').toLowerCase().replace(/\/$/, '')));
+  let allSaved = [];
+  const errors = [];
+  for (let i = 0; i < DAILY_SCOUT_CATEGORIES.length; i++) {
+    btn.textContent = `Scouting… (${i + 1}/${DAILY_SCOUT_CATEGORIES.length})`;
+    const result = await searchCategoryForLeads(DAILY_SCOUT_CATEGORIES[i], 'the United States', '', knownSites, null);
+    if (result.error) errors.push(result.error);
+    allSaved = allSaved.concat(result.saved);
+  }
+  btn.disabled = false;
+  btn.textContent = '🔍 Daily Scout';
+  renderAll();
+
+  if (!allSaved.length) {
+    toast('Daily Scout found nothing new today' + (errors.length ? ' — some searches failed, try again later' : ''));
+    return;
+  }
+  selectedLeadIds = new Set(allSaved.map(l => l.id));
+  renderLeads();
+  const n = allSaved.length;
+  if (confirm(`Daily Scout found ${n} new lead${n === 1 ? '' : 's'} today. Add ${n === 1 ? 'it' : 'them'} to a Google Sheet now?`)) {
+    exportToSheet('leads', allSaved.map(l => l.id));
+  } else {
+    toast(`${n} new lead${n === 1 ? '' : 's'} added and selected below — export any time`);
+  }
 }
 
 // ============ MANUAL ADD ============
