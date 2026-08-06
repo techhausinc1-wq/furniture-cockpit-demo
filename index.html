@@ -344,6 +344,25 @@
     <div id="lead-detail-body" class="detail-body"></div>
     <div class="form-actions">
       <button type="button" class="btn ghost" onclick="closeModal('lead-detail-modal')">Close</button>
+      <button type="button" class="btn primary" id="email-card-open-btn" onclick="openEmailCardModal()">✉ Email this card</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ EMAIL CARD ("cheat sheet") MODAL ============ -->
+<div class="modal-overlay" id="email-card-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">Email this card</div>
+      <span class="modal-close" onclick="closeModal('email-card-modal')">&times;</span>
+    </div>
+    <div class="form-grid">
+      <div><label>Send to</label><input type="email" id="ec-to" placeholder="teammate@example.com" required></div>
+      <div><label>Note (optional)</label><textarea id="ec-note" rows="3" placeholder="e.g. Call this one first, they were asking about pricing last week"></textarea></div>
+    </div>
+    <div class="form-actions">
+      <button type="button" class="btn ghost" onclick="closeModal('email-card-modal')">Cancel</button>
+      <button type="button" class="btn primary" onclick="sendEmailCard()">Open in Gmail</button>
     </div>
   </div>
 </div>
@@ -1134,9 +1153,11 @@ function toggleSelectAllLeads(checked) {
 // with no way to see the lead's full record in one place -- that link still
 // works (small ↗ icon), but the name itself now opens this in-app detail
 // view instead, since that's what people actually expect from a CRM row.
+let detailModalLeadId = null;
 function openLeadDetail(id) {
   const l = leads.find(x => x.id === id);
   if (!l) return;
+  detailModalLeadId = id;
   const body = document.getElementById('lead-detail-body');
   body.innerHTML = `
     <div class="detail-row"><label>Company</label><div>${esc(l.company)}${l.website ? ` — <a href="${esc(l.website)}" target="_blank" rel="noopener">${esc(l.website)} ↗</a>` : ''}</div></div>
@@ -1151,6 +1172,41 @@ function openLeadDetail(id) {
     <div class="detail-row"><label>Source</label><div>${esc(l.source)}</div></div>
   `;
   openModal('lead-detail-modal');
+}
+
+// ============ EMAIL CARD ("cheat sheet") ============
+function openEmailCardModal() {
+  document.getElementById('ec-to').value = '';
+  document.getElementById('ec-note').value = '';
+  openModal('email-card-modal');
+}
+// Plain-text version of the same card shown in the detail modal, plus
+// whatever personal note the sender adds -- meant to be forwardable as-is,
+// so whoever gets it has everything they'd need to make the call cold.
+function sendEmailCard() {
+  const l = leads.find(x => x.id === detailModalLeadId);
+  if (!l) { toast('Could not find that lead'); return; }
+  const to = document.getElementById('ec-to').value.trim();
+  const note = document.getElementById('ec-note').value.trim();
+  if (!to) { toast('Enter an email address first'); return; }
+  const lines = [];
+  if (note) lines.push(note, '');
+  lines.push(
+    l.company,
+    l.website || '',
+    'Category: ' + l.category,
+    'Territory: ' + l.territory,
+    '',
+    'Why reach out: ' + l.why,
+    '',
+    'Contact: ' + (l.contact || '(none on file)'),
+    'Status: ' + l.status,
+  );
+  if (l.assignedToName) lines.push('Assigned to: ' + l.assignedToName + (l.assignNote ? ' — "' + l.assignNote + '"' : ''));
+  if (l.notes) lines.push('', 'Notes: ' + l.notes);
+  const subject = 'Lead: ' + l.company + ' — Modern Line Furniture';
+  window.open(gmailComposeUrl(to, subject, lines.join('\n')), '_blank', 'noopener');
+  closeModal('email-card-modal');
 }
 
 // ============ LEAD ACTIONS ============
