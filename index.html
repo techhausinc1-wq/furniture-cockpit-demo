@@ -279,6 +279,7 @@
             <option value="restaurant and hospitality furniture dealers">Restaurant/hospitality dealers</option>
             <option value="foodservice equipment distributors that also sell furniture">Foodservice distributors</option>
             <option value="commercial/contract/hospitality furniture manufacturers (potential partner manufacturer)">Partner manufacturers</option>
+            <option value="all">All categories</option>
           </select>
         </div>
         <div class="field">
@@ -1494,19 +1495,31 @@ async function findLeads() {
   progressText.textContent = 'Searching the web…';
 
   const knownSites = new Set(leads.map(l => (l.website || '').toLowerCase().replace(/\/$/, '')));
-  const result = await searchCategoryForLeads(category, region, keyword, knownSites, progressText);
+  // "All categories" runs the same 5 searches Daily Scout does, but scoped to
+  // whatever region/keyword the user actually typed instead of nationwide --
+  // e.g. "everything in Texas" instead of "everything, everywhere".
+  const categoriesToRun = category === 'all' ? DAILY_SCOUT_CATEGORIES : [category];
+  let allSaved = [], allRaw = 0, allDup = 0;
+  const errors = [];
+  for (let i = 0; i < categoriesToRun.length; i++) {
+    if (categoriesToRun.length > 1) progressText.textContent = `Searching… (${i + 1}/${categoriesToRun.length})`;
+    const result = await searchCategoryForLeads(categoriesToRun[i], region, keyword, knownSites, categoriesToRun.length > 1 ? null : progressText);
+    if (result.error) errors.push(result.error);
+    allSaved = allSaved.concat(result.saved);
+    allRaw += result.rawCount;
+    allDup += result.dupCount;
+  }
 
   progress.classList.remove('active');
   btn.disabled = false;
 
-  if (!result.rawCount && !result.saved.length) {
-    errorBox.textContent = result.error ? ('Search failed: ' + result.error) : 'No results — try a broader region or different category.';
+  if (!allRaw && !allSaved.length) {
+    errorBox.textContent = errors.length ? ('Search failed: ' + errors[0]) : 'No results — try a broader region or different category.';
     errorBox.classList.add('active');
     return;
   }
-  const fresh = result.saved, dupCount = result.dupCount;
   renderAll();
-  toast(fresh.length + ' new lead' + (fresh.length === 1 ? '' : 's') + ' added' + (dupCount ? (' (' + dupCount + ' already in your list)') : ''));
+  toast(allSaved.length + ' new lead' + (allSaved.length === 1 ? '' : 's') + ' added' + (allDup ? (' (' + allDup + ' already in your list)') : ''));
 }
 
 // ============ DAILY SCOUT ============
