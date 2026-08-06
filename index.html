@@ -240,7 +240,7 @@
     <div class="brand">Modern Line <span>Furniture</span></div>
     <div class="tag">Lead Finder — Partner &amp; Reseller Prospecting</div>
     <div class="spacer"></div>
-    <a class="btn ghost sm no-print" href="https://github.com/techhausinc1-wq/furniture-cockpit-demo/blob/main/docs/LEAD-FINDER-MANUAL.md" target="_blank" rel="noopener">Manual</a>
+    <a class="btn ghost sm no-print" href="https://techhausinc1-wq.github.io/furniture-cockpit-demo/manual.html" target="_blank" rel="noopener">Manual</a>
     <button class="btn ghost sm no-print" onclick="openTeamModal()">Team</button>
     <button class="btn ghost sm no-print" onclick="exportLeadsToExcel()">Export to Excel</button>
     <button class="btn ghost sm no-print" id="sheet-btn-leads" onclick="exportToSheet('leads')">Export to Google Sheet</button>
@@ -332,7 +332,7 @@
     <div id="shows-wrap"></div>
   </main>
 
-  <footer class="pagefoot no-print">Modern Line Furniture · Lead Finder · leads are found via live web search — verify contact details before relying on them for outreach. · <a href="https://github.com/techhausinc1-wq/furniture-cockpit-demo/blob/main/docs/LEAD-FINDER-MANUAL.md" target="_blank" rel="noopener">Manual</a></footer>
+  <footer class="pagefoot no-print">Modern Line Furniture · Lead Finder · leads are found via live web search — verify contact details before relying on them for outreach. · <a href="https://techhausinc1-wq.github.io/furniture-cockpit-demo/manual.html" target="_blank" rel="noopener">Manual</a></footer>
 </div>
 
 <!-- ============ ADD / EDIT LEAD MODAL ============ -->
@@ -1302,7 +1302,7 @@ const REGION_PRESETS = [
   'Southwest (TX, OK, NM, AZ)',
   'West Coast (CA, OR, WA)',
   'Pacific Northwest (WA, OR, ID)',
-  'Nationwide',
+  'Nationwide (lower 48)',
 ];
 function renderRegionChips() {
   const row = document.getElementById('region-chip-row');
@@ -1335,7 +1335,7 @@ async function searchCategoryForLeads(category, region, keyword, knownSites, pro
     'Search the web and return ONLY a JSON array (no prose, no markdown). Each item MUST have: {company, website, territory, why (1 sentence explaining the fit), contact}. ' +
     'For "contact", check the company\'s own site (About/Team/Contact pages) and build a single string combining whatever you can actually verify, in this exact order and format, omitting any piece you cannot find: "Ask for: <name>, <title> · <phone> · <email>". ' +
     'A phone number alone (e.g. the general office line) is still useful — always include one if the site publishes one, even without a named contact. Never invent a name, phone number, or email — leave contact as an empty string only if truly nothing is published. ' +
-    'Only include REAL companies with an actual working website you can identify — never invent a company or URL. Return 6-10 items.';
+    'Only include REAL companies with an actual working website you can identify — never invent a company or URL. Unless the search is explicitly for Canadian partner manufacturers, only include companies based in the 48 contiguous US states — never Alaska, Hawaii, or anywhere outside the US (freight cost makes AK/HI impractical for this business). Return 6-10 items.';
   const userMsg = isManufacturerSearch
     ? 'Find ' + category + ' covering ' + region + (keyword ? (', specifically related to: ' + keyword) : '') +
       '. Modern Line Furniture is looking for other furniture manufacturers as potential business allies — either (a) US-based peer manufacturers of similar size who could be referral partners or overflow-capacity subcontractors, or (b) Canadian manufacturers (only Canada, never the UK or elsewhere overseas) that make hospitality/contract furniture but do NOT yet have an established US sales/distribution presence, who might want Modern Line to represent or help distribute their line in the US. Say in "why" which of these two angles applies and briefly why. For "territory", always use a US-state-abbreviation style even for Canadian leads (e.g. "Ontario, Canada", not "Canada (Vaughan, Ontario)") so it matches every other lead in the list. ' +

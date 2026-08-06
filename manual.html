@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lead Finder Manual — Modern Line Furniture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,500;0,600;1,400&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f6f3ec; --bg-2: #ffffff; --bg-3: #fbf8f1;
+    --ink: #1c1f2a; --ink-2: #2d3142; --text-dim: #5a6072; --text-mute: #8a8f9e;
+    --line: #e6e0d2; --line-2: #d0c9b7;
+    --navy: #1f3a5f; --navy-bright: #2d5689;
+    --terracotta: #b85c3b; --terracotta-bg: #f3e2da;
+    --olive: #5e6e3d; --olive-bg: #e9edda;
+    --radius: 10px;
+    --shadow: 0 1px 2px rgba(28,31,42,.05), 0 6px 20px rgba(28,31,42,.06);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); color: var(--ink); font-family: 'Inter', -apple-system, sans-serif; font-size: 15.5px; line-height: 1.7; -webkit-font-smoothing: antialiased; }
+  a { color: var(--navy); text-decoration: none; border-bottom: 1px solid var(--line-2); }
+  a:hover { color: var(--navy-bright); border-color: var(--navy-bright); }
+  code { font-family: 'JetBrains Mono', monospace; font-size: 13px; background: var(--bg-3); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; }
+  pre { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; background: var(--ink); color: #f1ede2; border-radius: var(--radius); padding: 16px 18px; overflow-x: auto; line-height: 1.6; margin: 12px 0; }
+  pre code { background: none; border: none; padding: 0; color: inherit; }
+
+  header { border-bottom: 0.5px solid var(--line); background: var(--bg-2); padding: 18px 24px; position: sticky; top: 0; z-index: 10; }
+  .header-inner { max-width: 780px; margin: 0 auto; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .brand { font-family: 'Lora', serif; font-weight: 600; font-size: 17px; color: var(--ink); }
+  .brand span { color: var(--terracotta); font-style: italic; }
+  .back-link { margin-left: auto; font-size: 12.5px; color: var(--text-dim); border: none; }
+
+  nav.toc { max-width: 780px; margin: 0 auto; padding: 20px 24px 0; }
+  .toc-box { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 20px; box-shadow: var(--shadow); }
+  .toc-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-mute); font-weight: 700; margin-bottom: 10px; }
+  .toc-box ol { padding-left: 20px; columns: 2; column-gap: 24px; }
+  .toc-box li { font-size: 13.5px; margin-bottom: 6px; break-inside: avoid; }
+  .toc-box a { border: none; }
+
+  main { max-width: 780px; margin: 0 auto; padding: 40px 24px 100px; }
+  .kicker { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--terracotta); margin-bottom: 10px; }
+  h1 { font-family: 'Lora', serif; font-weight: 600; font-size: 32px; letter-spacing: -0.01em; margin-bottom: 10px; }
+  .subtitle { color: var(--text-dim); font-size: 15px; margin-bottom: 20px; max-width: 60ch; }
+  .pin-row { display: flex; gap: 10px; flex-wrap: wrap; margin: 4px 0 40px; }
+  .pin-chip { background: var(--bg-3); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; font-size: 12.5px; }
+  .pin-chip b { color: var(--navy); }
+
+  h2 { font-family: 'Lora', serif; font-weight: 600; font-size: 24px; margin: 52px 0 8px; padding-top: 24px; border-top: 0.5px solid var(--line); scroll-margin-top: 80px; }
+  h2:first-of-type { border-top: none; padding-top: 0; margin-top: 0; }
+  .h2-sub { color: var(--text-mute); font-size: 13.5px; margin-bottom: 20px; }
+  h3 { font-family: 'Inter', sans-serif; font-weight: 700; font-size: 15px; margin: 26px 0 8px; color: var(--navy); scroll-margin-top: 80px; }
+  p { margin: 0 0 14px; max-width: 68ch; }
+  ul, ol { margin: 0 0 14px; padding-left: 22px; max-width: 66ch; }
+  li { margin-bottom: 8px; }
+  strong { font-weight: 600; }
+
+  .card { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; margin: 16px 0; box-shadow: var(--shadow); max-width: 66ch; }
+  .card.accent { background: var(--terracotta-bg); border-color: var(--terracotta); }
+  .card.calm { background: var(--olive-bg); border-color: var(--olive); }
+  .card-title { font-weight: 700; font-size: 13.5px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .card p:last-child { margin-bottom: 0; }
+
+  .step { display: flex; gap: 14px; margin-bottom: 16px; max-width: 66ch; }
+  .step-num { flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; }
+  .step-body { padding-top: 3px; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; max-width: 66ch; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+  th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-mute); font-weight: 700; }
+
+  footer { text-align: center; padding: 32px 24px 60px; color: var(--text-mute); font-size: 12px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="brand">Modern Line <span>Furniture</span></div>
+    <a class="back-link" href="https://techhausinc1-wq.github.io/furniture-cockpit-demo/">← Back to Lead Finder</a>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="toc-box">
+    <div class="toc-title">On this page</div>
+    <ol>
+      <li><a href="#what-is-this">What this tool actually is</a></li>
+      <li><a href="#logging-in">Logging in</a></li>
+      <li><a href="#finding-leads">Finding leads</a></li>
+      <li><a href="#daily-scout">Daily Scout (one-click search)</a></li>
+      <li><a href="#lead-card">A lead's detail card</a></li>
+      <li><a href="#emailing">Emailing a lead as a cheat sheet</a></li>
+      <li><a href="#assigning">Assigning work to your team</a></li>
+      <li><a href="#exporting">Selecting and exporting</a></li>
+      <li><a href="#team">Adding people to the tool</a></li>
+      <li><a href="#automation">Running it all automatically</a></li>
+    </ol>
+  </div>
+</nav>
+
+<main>
+  <div class="kicker">Reference</div>
+  <h1>Lead Finder Manual</h1>
+  <p class="subtitle">A complete walkthrough of what this tool does and how to use every part of it — written for anyone, whether or not you've touched it before.</p>
+  <div class="pin-row">
+    <span class="pin-chip">Link: <b>furniture-cockpit-demo</b></span>
+    <span class="pin-chip">Vlad — PIN <b>1958</b></span>
+    <span class="pin-chip">Yana — PIN <b>3072</b></span>
+  </div>
+
+  <h2 id="what-is-this">What this tool actually is</h2>
+  <p>Modern Line Furniture makes custom seating, tables, booths, and lounge furniture for restaurants, hotels, and hospitality spaces. To grow the business, someone needs to find companies who might want to sell or represent Modern Line's furniture — sales reps who could add it to their line card, dealers who could stock it, wholesalers who could distribute it, or even other furniture manufacturers who'd want to partner up. Finding those companies used to mean manually searching the internet, checking if a company already had a competing line, tracking down someone's actual name and phone number, and writing all of it down somewhere so it didn't get lost or duplicated.</p>
+  <p>This tool does that searching for you. It goes out and finds real, currently-operating companies that fit what Modern Line is looking for, checks whether you've already found that company before, and saves everything about it — the company name, their website, why they're a good fit, and a real contact if one is publicly listed — in one shared list that everyone on the team can see and work from.</p>
+  <p>It also handles what happens <em>after</em> you find a lead: assigning it to whoever should follow up, tracking whether they've been contacted yet, and getting the information into whatever format you actually want to use — a spreadsheet, a printed list, or an email.</p>
+
+  <h2 id="logging-in">Logging in</h2>
+  <p>Open the link at the top of this page. You'll see a screen asking for a 4-digit PIN — nothing else. No username, no password, no account to remember. Type in your PIN (see the chips above) and you're in. Whoever built this made it deliberately simple: the PIN alone tells the tool who you are, so it knows what name to show next to leads you touch and who "you" means when someone assigns something to you.</p>
+  <p>This isn't meant to be a bank-vault-level security system — it's an internal tool for a small team, and the PIN is just there to keep the "who did what" straight, not to lock out the world. Everyone who's supposed to have access already has a PIN.</p>
+
+  <h2 id="finding-leads">Finding leads</h2>
+  <p>Near the top of the page is a panel called <strong>"Find new leads."</strong> This is the manual, hands-on way to search — you tell it exactly what you're looking for, and it goes and looks.</p>
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body"><strong>Category</strong> — pick what kind of company you want: a manufacturer's rep (someone who sells multiple furniture brands to buyers on commission), a wholesaler, a hospitality dealer, a foodservice distributor, or a partner manufacturer (another furniture maker who could refer work back and forth, or represent Modern Line's line if they're overseas).</div>
+  </div>
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body"><strong>Region</strong> — type in a state, a region like "Pacific Northwest," or leave it blank for nationwide. There are also quick-click buttons below the search fields (Northeast, Southeast, Southwest, and so on) that fill this field in for you automatically, grouped the way furniture sales territories actually get talked about in the industry — not just individual states.</div>
+  </div>
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-body"><strong>Keyword</strong> (optional) — narrow it further, like "outdoor seating" or "banquette," if you want something specific.</div>
+  </div>
+  <div class="step">
+    <div class="step-num">4</div>
+    <div class="step-body">Click <strong>Search</strong>. It takes anywhere from 15 seconds to about a minute — it's genuinely searching the live internet, not pulling from some pre-made list, so real research is happening in that time. When it's done, any new companies it found get added straight into your leads list below. If a company it found is already in your list, it skips it — you'll never see true duplicates pile up.</div>
+  </div>
+
+  <h2 id="daily-scout">Daily Scout — the one-click version</h2>
+  <div class="h2-sub">For when you don't want to fill out a form, you just want to know what's new</div>
+  <div class="card accent">
+    <div class="card-title">🔍 Daily Scout</div>
+    <p>This button, right above the search panel, is a shortcut for "just find me whatever's new today, everywhere." Instead of picking one category and one region, it runs through <strong>every category</strong> across the <strong>entire country</strong> automatically, one after another. It takes a few minutes since it's really doing five separate searches back to back, but you only have to click once.</p>
+    <p>When it's finished, it tells you how many genuinely new companies it found, automatically checks the boxes next to those specific ones (see "Selecting and exporting" below for what the checkboxes are for), and asks if you'd like to send just those new ones straight to a Google Sheet. Say yes, and you'll land right on a finished spreadsheet with today's finds already filled in.</p>
+  </div>
+
+  <h2 id="lead-card">A lead's detail card</h2>
+  <p>Every lead in your list shows up as a row in a table, with columns for the company, category, territory, and so on. If a row feels too cramped to read comfortably, click directly on the <strong>company's name</strong> (not the small ↗ arrow next to it — that opens the company's actual website in a new tab). Clicking the name itself opens a clean card showing everything on file for that one lead: category, territory, why it's a good fit, contact info, current status, who it's assigned to, and any notes anyone's added. It's the same information as the row, just laid out to actually read comfortably.</p>
+
+  <h2 id="emailing">Emailing a lead as a cheat sheet</h2>
+  <p>Sometimes you want to hand a lead off to someone — a teammate, yourself later, anyone — with enough context that they don't have to go dig through the tool first. Open a lead's detail card (above) and click <strong>"✉ Email this card."</strong> A small box pops up asking who to send it to and, if you want, a personal note (something like "call this one first, they seemed eager"). Click "Open in Gmail" and it builds a complete email — your note at the top if you added one, then the company name, website, category, territory, why it's worth reaching out, whatever contact info is on file, and current status — all formatted and ready. Nothing gets sent automatically; it opens the draft in Gmail and you review and hit Send yourself, same as writing any other email.</p>
+
+  <h2 id="assigning">Assigning work to your team</h2>
+  <p>Every lead row has a <strong>"Send to…"</strong> button. Click it, pick a teammate from the list, optionally add a short note explaining why ("they mentioned wanting a new supplier last week"), and that lead now shows an arrow and that person's name right on the row, so everyone can see who's supposed to be working it. This is the actual point of the tool being shared — instead of leads living in someone's personal notes, everyone sees the same list and the same assignments at the same time, from their own device.</p>
+  <p>The same "Send to…" pattern works identically for trade shows, tracked further down the page — find a show, decide who should look into attending or exhibiting, assign it the same way.</p>
+
+  <h2 id="exporting">Selecting and exporting</h2>
+  <p>To the left of every lead's name is a small checkbox, and there's one at the very top of the column too — checking that top one selects every lead currently showing in your list. Checking individual boxes lets you pick out a handful of specific leads. This matters when you don't want to export <em>everything</em> — say you only want to hand someone the 5 leads from Daily Scout this morning, not all 141 you've accumulated over time.</p>
+  <table>
+    <tr><th>Button</th><th>What it does</th></tr>
+    <tr><td><strong>Export to Excel</strong></td><td>Downloads a spreadsheet file (CSV) straight to your computer, ready to open in Excel or Numbers.</td></tr>
+    <tr><td><strong>Export to Google Sheet</strong></td><td>Creates a brand-new, real Google Sheet — properly formatted with columns already sized to fit the content, no manual cleanup needed. It asks you to pick which Google account it should go into, so it can land wherever you want it (your Drive, a shared team Drive, whichever you choose in the moment).</td></tr>
+  </table>
+  <p>Both respect your checkboxes: if anything's checked, only those leads get exported. If nothing's checked, it exports the whole list — nothing extra to remember, the tool just does the sensible thing either way.</p>
+
+  <h2 id="team">Adding people to the tool</h2>
+  <p>Click <strong>"Team"</strong> in the top-right of the page to see everyone who currently has access, and to add someone new. Fill in their name, pick a 4-digit PIN for them, and optionally their email. Once added, you'll see an "invite" box with two options: <strong>copy the invite text</strong> (a ready-to-paste message with the link and their PIN, for texting or pasting anywhere) or, if you gave them an email, <strong>email the invite</strong> directly through Gmail. Either way, all they need to get started is that PIN — nothing to install, no account to create.</p>
+
+  <h2 id="automation">Running it all automatically</h2>
+  <div class="h2-sub">A version of Daily Scout that runs by itself, with nobody touching a keyboard</div>
+  <p>Everything described above needs a person to open the tool and click something. There's also a fully automatic version — it runs on a schedule (once a day by default), searches for new leads on its own, saves them the same way a manual search would, adds them to a running Google Sheet automatically, and emails a summary to the team, all without anyone opening a browser.</p>
+  <p>Making something run completely unattended, with nobody around to click "yes" on a Google login screen or hit Send on an email, needs different tools than the one-click buttons above:</p>
+  <div class="card calm">
+    <div class="card-title">Why this needs extra setup</div>
+    <p>The manual "Export to Google Sheet" button works because a real person is sitting there to pick their Google account when asked. A scheduled job running at 8am with nobody watching can't do that — there's no one to click through a login screen. It needs a <strong>Google service account</strong> instead, which is essentially a permanent, non-human identity that can write to a specific spreadsheet on its own, indefinitely, without ever showing a login screen. Sending the summary email has the same problem — opening a Gmail draft and waiting for someone to click Send doesn't work if no one's there, so it uses <strong>Resend</strong> (an email-sending service) to actually deliver the message on its own.</p>
+  </div>
+  <p>Setting this up is a one-time, roughly 15-minute task, fully spelled out step by step in <code>docs/DAILY-SCOUT-AUTOMATION-SETUP.md</code> in this project's repository. In short: create a service account in Google Cloud, share one spreadsheet with it, sign up for Resend and get an API key, and make sure whoever should get the daily summary has their email address saved under "Team." Once that's handed off, it runs by itself from then on — no further setup, ever, unless something needs to move.</p>
+  <p>Once it's live, here's exactly what happens every morning: it searches all five categories nationwide, quietly skips anything already in the list, saves whatever's genuinely new the same way a manual search does, adds those rows to the bottom of one ongoing "Daily Scout Log" spreadsheet (it only ever adds to it — it never erases or overwrites a previous day), and sends an email to your team listing each new company, its territory, and why it's worth a call.</p>
+
+  <div class="card">
+    <div class="card-title">Testing it on demand</div>
+    <p style="margin-bottom:8px;">Once configured, this exact same automated run can be triggered any time you want — no need to wait for the schedule, and it's a good way to confirm everything's working correctly right after setup:</p>
+    <pre><code>curl -X POST https://igor-hq.techhausinc1.deno.net/mlf/scout/run-now \
+  -H "X-Access-Code: modernline2026"</code></pre>
+  </div>
+
+  <h3>Changing the schedule from daily to weekly</h3>
+  <p>By default it runs every single day. If once a week (say, every Monday morning) fits better, that's a one-line change in the code — a developer would find the line that says <code>Deno.cron("mlf-daily-scout", "0 13 * * *", ...)</code> and change the schedule part to run weekly instead of daily. Not something to do yourself — just flag it and it's a quick change.</p>
+</main>
+
+<footer>Modern Line Furniture · Lead Finder Manual</footer>
+
+</body>
+</html>
