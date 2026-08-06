@@ -1258,26 +1258,31 @@ async function submitAssignForm(evt) {
 }
 
 // ============ VERIFY (AI-assisted) ============
-async function verifyLead(id) {
-  const l = leads.find(x => x.id === id); if (!l) return;
-  toast('Verifying ' + l.company + '…');
+// Shared by the manual "Verify" button and auto-verify below.
+async function runVerify(l) {
   const system = 'You verify B2B sales leads. Given a company name and website, search the web to confirm: (1) does the company still exist and does the website work, (2) is there a better/more specific contact (email, phone, or a "become a vendor/rep" page URL) than what\'s already known. ' +
     'Return ONLY a JSON object (no prose): {ok: true/false, contact: "best contact info found, or empty string", note: "one short sentence"}.';
   const userMsg = 'Company: ' + l.company + '\nWebsite: ' + l.website + '\nKnown contact: ' + (l.contact || 'none') + '\n\nVerify and return JSON only.';
+  const res = await fetchJson(AI_WORKER_URL, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      _accessCode: AI_WORKER_AUTH, model: 'claude-sonnet-4-5', max_tokens: 600, system,
+      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }],
+      messages: [{ role: 'user', content: userMsg }],
+    }),
+    timeoutMs: 60000,
+  });
+  let text = '';
+  for (const b of (res.content || [])) if (b.type === 'text') text += b.text;
+  const start = text.indexOf('{'), end = text.lastIndexOf('}');
+  return JSON.parse(text.slice(start, end + 1));
+}
+
+async function verifyLead(id) {
+  const l = leads.find(x => x.id === id); if (!l) return;
+  toast('Verifying ' + l.company + '…');
   try {
-    const res = await fetchJson(AI_WORKER_URL, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        _accessCode: AI_WORKER_AUTH, model: 'claude-sonnet-4-5', max_tokens: 600, system,
-        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }],
-        messages: [{ role: 'user', content: userMsg }],
-      }),
-      timeoutMs: 60000,
-    });
-    let text = '';
-    for (const b of (res.content || [])) if (b.type === 'text') text += b.text;
-    const start = text.indexOf('{'), end = text.lastIndexOf('}');
-    const parsed = JSON.parse(text.slice(start, end + 1));
+    const parsed = await runVerify(l);
     const verified = { ok: !!parsed.ok, date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) };
     const patch = { verified };
     if (parsed.contact) patch.contact = parsed.contact;
@@ -1288,6 +1293,34 @@ async function verifyLead(id) {
   } catch (e) {
     toast('Verify failed: ' + e.message);
   }
+}
+
+// Runs the same verify pass automatically on freshly-found leads right after
+// a search, a few at a time so a big batch (Daily Scout) doesn't hammer the
+// AI worker all at once. Silent (no per-lead toast) -- rows just fill in
+// their contact/verified badge on their own as each one finishes.
+async function autoVerifyLeads(ids) {
+  const CONCURRENCY = 4;
+  let cursor = 0;
+  async function worker() {
+    while (cursor < ids.length) {
+      const id = ids[cursor++];
+      const l = leads.find(x => x.id === id);
+      if (!l) continue;
+      try {
+        const parsed = await runVerify(l);
+        const verified = { ok: !!parsed.ok, date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) };
+        const patch = { verified };
+        if (parsed.contact) patch.contact = parsed.contact;
+        const updated = await fetchJson(MLF_WORKER_URL + '/leads/' + id, { method: 'PATCH', headers: mlfHeaders(), body: JSON.stringify(patch) });
+        leads = leads.map(x => x.id === id ? updated : x);
+        renderAll();
+      } catch (e) {
+        console.warn('[LeadFinder] auto-verify failed for', l.company, e.message);
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, ids.length) }, worker));
 }
 
 // ============ REGION QUICK-SELECT ============
@@ -1391,6 +1424,7 @@ async function searchCategoryForLeads(category, region, keyword, knownSites, pro
       saved = res.leads;
       leads = saved.concat(leads);
       saved.forEach(l => knownSites.add((l.website || '').toLowerCase().replace(/\/$/, '')));
+      autoVerifyLeads(saved.map(l => l.id));
     } catch (e) {
       return { saved: [], rawCount: items.length, dupCount, error: 'Found leads but failed to save: ' + e.message };
     }
