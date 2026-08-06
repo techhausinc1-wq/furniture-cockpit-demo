@@ -28,7 +28,8 @@
 
   header { border-bottom: 0.5px solid var(--line); background: var(--bg-2); padding: 18px 24px; position: sticky; top: 0; z-index: 10; }
   .header-inner { max-width: 780px; margin: 0 auto; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-  .brand { font-family: 'Lora', serif; font-weight: 600; font-size: 17px; color: var(--ink); }
+  .brand { font-family: 'Lora', serif; font-weight: 600; font-size: 17px; color: var(--ink); border-bottom: none; cursor: pointer; }
+  .brand:hover { opacity: 0.75; border-bottom: none; }
   .brand span { color: var(--terracotta); font-style: italic; }
   .back-link { margin-left: auto; font-size: 12.5px; color: var(--text-dim); border: none; }
 
@@ -77,7 +78,7 @@
 
 <header>
   <div class="header-inner">
-    <div class="brand">Modern Line <span>Furniture</span></div>
+    <a class="brand" href="https://techhausinc1-wq.github.io/furniture-cockpit-demo/">Modern Line <span>Furniture</span></a>
     <a class="back-link" href="https://techhausinc1-wq.github.io/furniture-cockpit-demo/">← Back to Lead Finder</a>
   </div>
 </header>
