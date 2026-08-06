@@ -105,6 +105,10 @@
   .toolbar .spacer { flex: 1; }
   .filter-chip { font-size: 12px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--bg-3); color: var(--text-dim); cursor: pointer; }
   .filter-chip.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+  .tab-bar { display: flex; gap: 6px; margin-bottom: 20px; border-bottom: 1px solid var(--line); }
+  .tab-btn { font-size: 14px; font-weight: 600; padding: 10px 16px; border: none; border-bottom: 2px solid transparent; background: none; color: var(--text-dim); cursor: pointer; margin-bottom: -1px; }
+  .tab-btn.active { color: var(--navy); border-bottom-color: var(--terracotta); }
+  .tab-btn .count { font-family: 'JetBrains Mono', monospace; font-weight: 500; font-size: 11.5px; color: var(--text-mute); margin-left: 4px; }
   .region-chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
   .region-chip { font-size: 11.5px; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line-2); background: transparent; color: var(--text-mute); cursor: pointer; }
   .region-chip:hover { background: var(--bg-3); color: var(--text-dim); }
@@ -259,6 +263,12 @@
       <div class="s" id="print-date"></div>
     </div>
 
+    <div class="tab-bar no-print">
+      <button class="tab-btn active" id="tab-btn-leads" onclick="switchTab('leads')">Leads<span class="count" id="tab-count-leads"></span></button>
+      <button class="tab-btn" id="tab-btn-shows" onclick="switchTab('shows')">Trade Shows<span class="count" id="tab-count-shows"></span></button>
+    </div>
+
+    <div id="tab-leads">
     <div class="stat-row">
       <div class="stat"><div class="n" id="stat-total">0</div><div class="l">Total leads</div></div>
       <div class="stat"><div class="n" id="stat-mine">0</div><div class="l">Assigned to me</div></div>
@@ -313,8 +323,10 @@
     </div>
 
     <div id="leads-wrap"></div>
+    </div>
 
-    <div class="panel search-panel no-print" style="margin-top:36px;">
+    <div id="tab-shows" style="display:none">
+    <div class="panel search-panel no-print">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
         <div>
           <h2>Trade shows</h2>
@@ -335,6 +347,7 @@
     </div>
 
     <div id="shows-wrap"></div>
+    </div>
   </main>
 
   <footer class="pagefoot no-print">Modern Line Furniture · Lead Finder · leads are found via live web search — verify contact details before relying on them for outreach. · <a href="https://techhausinc1-wq.github.io/furniture-cockpit-demo/manual.html" target="_blank" rel="noopener">Manual</a></footer>
@@ -454,6 +467,28 @@
         <button type="submit" class="btn primary">Send</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- ============ SHOW DETAIL MODAL ============ -->
+<div class="modal-overlay" id="show-detail-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">Trade show details</div>
+      <span class="modal-close" onclick="closeModal('show-detail-modal')">&times;</span>
+    </div>
+    <div id="show-detail-body" class="detail-body"></div>
+    <div class="form-grid">
+      <div>
+        <label>Notes</label>
+        <textarea id="show-detail-notes" rows="3" placeholder="e.g. why this show matters, who to meet there, booth cost…"></textarea>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button type="button" class="btn ghost" onclick="closeModal('show-detail-modal')">Close</button>
+      <button type="button" class="btn ghost" onclick="closeModal('show-detail-modal'); openAssignShowModal(detailModalShowId)">Send to…</button>
+      <button type="button" class="btn primary" onclick="saveShowNotes()">Save notes</button>
+    </div>
   </div>
 </div>
 
@@ -935,7 +970,7 @@ function renderShows() {
       ${sorted.map(s => `
         <tr>
           <td>
-            <div class="lead-name">${s.applyUrl ? `<a href="${esc(s.applyUrl)}" target="_blank" rel="noopener">${esc(s.name)}</a>` : esc(s.name)}</div>
+            <div class="lead-name"><span class="lead-name-link" onclick="openShowDetail('${s.id}')">${esc(s.name)}</span>${s.applyUrl ? ` <a href="${esc(s.applyUrl)}" target="_blank" rel="noopener" class="lead-site-link" title="Exhibitor / apply page" onclick="event.stopPropagation()">↗</a>` : ''}</div>
             ${s.assignedTo ? `<div class="assign-badge">→ ${esc(s.assignedToName)}${s.assignNote ? `<span class="assign-note-text">"${esc(s.assignNote)}"</span>` : ''}</div>` : ''}
           </td>
           <td class="lead-territory">${esc(s.dates)}</td>
@@ -1082,11 +1117,48 @@ async function submitAssignShowForm(evt) {
     toast('Sent to ' + empName);
   } catch (e) { toast('Send failed: ' + e.message); }
 }
+
+// ============ SHOW DETAIL CARD ============
+let detailModalShowId = null;
+function openShowDetail(id) {
+  const s = shows.find(x => x.id === id);
+  if (!s) return;
+  detailModalShowId = id;
+  const body = document.getElementById('show-detail-body');
+  body.innerHTML = `
+    <div class="detail-row"><label>Show</label><div>${esc(s.name)}${s.applyUrl ? ` — <a href="${esc(s.applyUrl)}" target="_blank" rel="noopener">${esc(s.applyUrl)} ↗</a>` : ''}</div></div>
+    <div class="detail-row"><label>Dates</label><div>${esc(s.dates)}</div></div>
+    <div class="detail-row"><label>Location</label><div>${esc(s.location)}</div></div>
+    <div class="detail-row"><label>Why it's relevant</label><div>${esc(s.why)}</div></div>
+    <div class="detail-row"><label>Status</label><div>${esc(s.status)}</div></div>
+    ${s.assignedTo ? `<div class="detail-row"><label>Assigned to</label><div>${esc(s.assignedToName)}${s.assignNote ? ' — "' + esc(s.assignNote) + '"' : ''}</div></div>` : ''}
+  `;
+  document.getElementById('show-detail-notes').value = s.notes || '';
+  openModal('show-detail-modal');
+}
+async function saveShowNotes() {
+  const id = detailModalShowId; if (!id) return;
+  const notes = document.getElementById('show-detail-notes').value.trim();
+  try {
+    const updated = await fetchJson(MLF_WORKER_URL + '/shows/' + id, { method: 'PATCH', headers: mlfHeaders(), body: JSON.stringify({ notes }) });
+    shows = shows.map(s => s.id === id ? updated : s);
+    renderShows();
+    toast('Notes saved');
+  } catch (e) { toast('Save failed: ' + e.message); }
+}
 function renderStats() {
   document.getElementById('stat-total').textContent = leads.length;
   document.getElementById('stat-mine').textContent = leads.filter(l => l.assignedTo === session.id).length;
   document.getElementById('stat-contacted').textContent = leads.filter(l => l.status === 'contacted').length;
   document.getElementById('stat-partner').textContent = leads.filter(l => l.status === 'partner').length;
+  document.getElementById('tab-count-leads').textContent = leads.length ? `(${leads.length})` : '';
+  document.getElementById('tab-count-shows').textContent = shows.length ? `(${shows.length})` : '';
+}
+function switchTab(name) {
+  document.getElementById('tab-leads').style.display = name === 'leads' ? '' : 'none';
+  document.getElementById('tab-shows').style.display = name === 'shows' ? '' : 'none';
+  document.getElementById('tab-btn-leads').classList.toggle('active', name === 'leads');
+  document.getElementById('tab-btn-shows').classList.toggle('active', name === 'shows');
 }
 function renderLeads() {
   const wrap = document.getElementById('leads-wrap');
