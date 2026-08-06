@@ -1476,7 +1476,12 @@ async function searchCategoryForLeads(category, region, keyword, knownSites, pro
       // background -- a lead should already have its best contact info by
       // the time it's handed back, not pop in a few seconds after showing up.
       if (progressText) progressText.textContent = 'Verifying contact details…';
-      await autoVerifyLeads(saved.map(l => l.id));
+      const savedIds = new Set(saved.map(l => l.id));
+      await autoVerifyLeads(Array.from(savedIds));
+      // autoVerifyLeads replaces objects in the global `leads` array in
+      // place as each one finishes -- re-read from there so what we return
+      // reflects the post-verify contact info, not the pre-verify snapshot.
+      saved = leads.filter(l => savedIds.has(l.id));
     } catch (e) {
       return { saved: [], rawCount: items.length, dupCount, error: 'Found leads but failed to save: ' + e.message };
     }
