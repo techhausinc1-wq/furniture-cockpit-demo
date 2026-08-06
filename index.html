@@ -242,6 +242,7 @@
     <div class="spacer"></div>
     <a class="btn ghost sm no-print" href="https://techhausinc1-wq.github.io/furniture-cockpit-demo/manual.html" target="_blank" rel="noopener">Manual</a>
     <button class="btn ghost sm no-print" onclick="openTeamModal()">Team</button>
+    <button class="btn ghost sm no-print" id="verify-all-btn" onclick="verifyAllLeadsNow()">Verify all</button>
     <button class="btn ghost sm no-print" onclick="exportLeadsToExcel()">Export to Excel</button>
     <button class="btn ghost sm no-print" id="sheet-btn-leads" onclick="exportToSheet('leads')">Export to Google Sheet</button>
     <button class="btn ghost sm no-print" onclick="window.print()">Print / Export PDF</button>
@@ -763,10 +764,14 @@ function downloadCsv(filename, csv) {
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
-function exportLeadsToExcel() {
+async function exportLeadsToExcel() {
   const headers = ['Company', 'Website', 'Category', 'Territory', 'Why it fits', 'Contact', 'Status', 'Assigned to', 'Assign note', 'Verified', 'Notes', 'Source'];
   // Export just the checked rows if any are checked; otherwise export everything, same as before.
-  const source = selectedLeadIds.size ? leads.filter(l => selectedLeadIds.has(l.id)) : leads;
+  const scopeIds = selectedLeadIds.size ? Array.from(selectedLeadIds) : leads.map(l => l.id);
+  await verifyUnverifiedLeads(leads.filter(l => scopeIds.includes(l.id)));
+  // Re-read from `leads` after verifying -- verify replaces lead objects in place, the
+  // array captured above would still point at the pre-verify (stale contact) versions.
+  const source = leads.filter(l => scopeIds.includes(l.id));
   const rows = source.slice().sort((a, b) => a.company.localeCompare(b.company)).map(l => [
     l.company, l.website, l.category, l.territory, l.why, l.contact, l.status,
     l.assignedToName || '', l.assignNote || '',
@@ -786,14 +791,17 @@ function exportShowsToExcel() {
 }
 // One click -> Google's account picker -> a filled-in Sheet, no persistent
 // connection kept on our end. kind is 'leads' or 'shows'.
-async function exportToSheet(kind, ids) {
+async function exportToSheet(kind, ids, skipVerifyConfirm) {
   const btn = document.getElementById('sheet-btn-' + kind);
+  // Selected checkboxes scope the export to just those leads (e.g. "just
+  // today's new ones" from Daily Scout) -- same "if any selected, export
+  // just those, else export everything" pattern as the Excel export.
+  const scopeIds = ids || (kind === 'leads' && selectedLeadIds.size ? Array.from(selectedLeadIds) : null);
+  if (kind === 'leads') {
+    await verifyUnverifiedLeads(scopeIds ? leads.filter(l => scopeIds.includes(l.id)) : leads, { skipConfirm: skipVerifyConfirm });
+  }
   btn.disabled = true; btn.textContent = 'Opening Google…';
   try {
-    // Selected checkboxes scope the export to just those leads (e.g. "just
-    // today's new ones" from Daily Scout) -- same "if any selected, export
-    // just those, else export everything" pattern as the Excel export.
-    const scopeIds = ids || (kind === 'leads' && selectedLeadIds.size ? Array.from(selectedLeadIds) : null);
     const idsQuery = scopeIds ? '&ids=' + scopeIds.join(',') : '';
     const res = await fetchJson(MLF_WORKER_URL + '/sheets/auth?type=' + kind + idsQuery, { headers: mlfHeaders(), timeoutMs: 15000 });
     window.location.href = res.url;
@@ -1295,18 +1303,21 @@ async function verifyLead(id) {
   }
 }
 
-// Runs the same verify pass automatically on freshly-found leads right after
-// a search, a few at a time so a big batch (Daily Scout) doesn't hammer the
-// AI worker all at once. Silent (no per-lead toast) -- rows just fill in
-// their contact/verified badge on their own as each one finishes.
-async function autoVerifyLeads(ids) {
+// Runs the same verify pass automatically on a batch of leads, a fixed few
+// at a time (never all-at-once) so a big batch -- Daily Scout, or "Verify
+// all" against the whole list -- can't flood the AI worker or the browser
+// with dozens of simultaneous requests. One lead failing (site down, bad
+// JSON back from the model) is caught and skipped without stopping the rest.
+// onEach, if given, fires after every lead (success or failure) for progress
+// reporting -- it does not receive the result, just a tick.
+async function autoVerifyLeads(ids, onEach) {
   const CONCURRENCY = 4;
   let cursor = 0;
   async function worker() {
     while (cursor < ids.length) {
       const id = ids[cursor++];
       const l = leads.find(x => x.id === id);
-      if (!l) continue;
+      if (!l) { if (onEach) onEach(); continue; }
       try {
         const parsed = await runVerify(l);
         const verified = { ok: !!parsed.ok, date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) };
@@ -1317,10 +1328,46 @@ async function autoVerifyLeads(ids) {
         renderAll();
       } catch (e) {
         console.warn('[LeadFinder] auto-verify failed for', l.company, e.message);
+      } finally {
+        if (onEach) onEach();
       }
     }
   }
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, ids.length) }, worker));
+}
+
+// Verifies whichever leads in `list` don't have a verified badge yet, with a
+// progress toast, then returns once they're all done. Used both by the
+// standalone "Verify all" button (skipConfirm: true, since clicking the
+// button is already the confirmation) and by the export functions below
+// (skipConfirm not set, so exporting a big unverified batch asks first
+// rather than silently making someone wait).
+async function verifyUnverifiedLeads(list, opts) {
+  const unverified = list.filter(l => !l.verified);
+  if (!unverified.length) return;
+  if (!(opts && opts.skipConfirm)) {
+    const secs = Math.ceil(unverified.length / 4) * 6;
+    const ok = confirm(unverified.length + ' lead' + (unverified.length === 1 ? " hasn't" : " haven't") +
+      ' been verified yet. Verify ' + (unverified.length === 1 ? 'it' : 'them') + ' first? (about ' + secs + 's)\n\nChoosing Cancel exports with whatever contact info is already on file.');
+    if (!ok) return;
+  }
+  const total = unverified.length;
+  let done = 0;
+  toast('Verifying ' + total + ' lead' + (total === 1 ? '' : 's') + '…');
+  await autoVerifyLeads(unverified.map(l => l.id), () => { done++; });
+  toast('Verified ' + done + ' of ' + total + ' lead' + (total === 1 ? '' : 's') + '.');
+}
+
+async function verifyAllLeadsNow() {
+  const unverified = leads.filter(l => !l.verified);
+  if (!unverified.length) { toast('Everything is already verified.'); return; }
+  const btn = document.getElementById('verify-all-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Verifying…'; }
+  try {
+    await verifyUnverifiedLeads(leads, { skipConfirm: true });
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Verify all'; }
+  }
 }
 
 // ============ REGION QUICK-SELECT ============
@@ -1499,7 +1546,7 @@ async function runDailyScout() {
   renderLeads();
   const n = allSaved.length;
   if (confirm(`Daily Scout found ${n} new lead${n === 1 ? '' : 's'} today. Add ${n === 1 ? 'it' : 'them'} to a Google Sheet now?`)) {
-    exportToSheet('leads', allSaved.map(l => l.id));
+    exportToSheet('leads', allSaved.map(l => l.id), true);
   } else {
     toast(`${n} new lead${n === 1 ? '' : 's'} added and selected below — export any time`);
   }
