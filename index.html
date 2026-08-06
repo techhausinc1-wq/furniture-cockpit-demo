@@ -321,6 +321,7 @@
       <div class="spacer"></div>
       <button class="btn ghost sm no-print" id="reload-btn" onclick="reloadLeads()">Refresh</button>
       <button class="btn ghost sm no-print" onclick="openAddModal()">+ Add lead manually</button>
+      <button class="btn ghost sm no-print" onclick="openMassEmailModal()">Email selected</button>
     </div>
 
     <div id="leads-wrap"></div>
@@ -383,6 +384,26 @@
     <div class="form-actions">
       <button type="button" class="btn ghost" onclick="closeModal('email-card-modal')">Cancel</button>
       <button type="button" class="btn primary" onclick="sendEmailCard()">Open in Gmail</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MASS EMAIL (selected leads) MODAL ============ -->
+<div class="modal-overlay" id="mass-email-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">Email selected leads</div>
+      <span class="modal-close" onclick="closeModal('mass-email-modal')">&times;</span>
+    </div>
+    <div class="assign-lead-preview" id="me-count"></div>
+    <div class="assign-lead-preview" id="me-list" style="font-size:12px; color:var(--text-mute); margin-top:-8px;"></div>
+    <div class="form-grid">
+      <div><label>Subject</label><input type="text" id="me-subject"></div>
+      <div><label>Message</label><textarea id="me-body" rows="9"></textarea></div>
+    </div>
+    <div class="form-actions">
+      <button type="button" class="btn ghost" onclick="closeModal('mass-email-modal')">Cancel</button>
+      <button type="button" class="btn primary" onclick="sendMassEmail()">Open in Gmail</button>
     </div>
   </div>
 </div>
@@ -1302,6 +1323,49 @@ function sendEmailCard() {
   const subject = 'Lead: ' + l.company + ' — Modern Line Furniture';
   window.open(gmailComposeUrl(to, subject, lines.join('\n')), '_blank', 'noopener');
   closeModal('email-card-modal');
+}
+
+// ============ MASS EMAIL (selected leads) ============
+// One shared message, BCC'd to every selected lead that has an email on
+// file -- a real blast, not a personalized-per-company sequence (Gmail
+// can't mail-merge, and firing off several window.open() calls at once
+// gets blocked as popup spam anyway). Still just opens a draft for review,
+// same as every other email feature here -- nothing sends on its own.
+let massEmailRecipients = [];
+function massEmailDefaultBody() {
+  return [
+    'Hi,', '',
+    'My name is Vlad Spivak with Modern Line Furniture — we manufacture custom commercial furniture (seating, tables, booths, lounge furniture) for restaurants, hotels, and hospitality spaces, made in the USA.',
+    '',
+    'I wanted to reach out because your company looks like a great fit to carry our line alongside what you already offer your customers.',
+    '',
+    'Would you have 15 minutes for a quick call this week to see if it makes sense?',
+    '',
+    'Best,\nVlad Spivak\nModern Line Furniture\nModernLineFurniture.com\n917-373-3497 (call or text)',
+  ].join('\n');
+}
+function openMassEmailModal() {
+  if (!selectedLeadIds.size) { toast('Check the boxes next to the leads you want to email first.'); return; }
+  const selected = leads.filter(l => selectedLeadIds.has(l.id));
+  const withEmail = selected.filter(l => parseContact(l.contact).email);
+  const skipped = selected.length - withEmail.length;
+  if (!withEmail.length) { toast('None of the selected leads have an email on file — try Verify first.'); return; }
+  massEmailRecipients = withEmail;
+  document.getElementById('me-count').textContent = withEmail.length + ' recipient' + (withEmail.length === 1 ? '' : 's') +
+    (skipped ? ` — ${skipped} skipped, no email on file` : '');
+  document.getElementById('me-list').textContent = withEmail.map(l => l.company).join(', ');
+  document.getElementById('me-subject').value = 'Modern Line Furniture — new hospitality furniture line';
+  document.getElementById('me-body').value = massEmailDefaultBody();
+  openModal('mass-email-modal');
+}
+function sendMassEmail() {
+  const subject = document.getElementById('me-subject').value.trim() || 'Modern Line Furniture';
+  const body = document.getElementById('me-body').value;
+  const bcc = massEmailRecipients.map(l => parseContact(l.contact).email).join(',');
+  const url = 'https://mail.google.com/mail/?view=cm&fs=1&bcc=' + encodeURIComponent(bcc) +
+    '&su=' + encodeURIComponent(subject) + (body ? '&body=' + encodeURIComponent(body) : '');
+  window.open(url, '_blank', 'noopener');
+  closeModal('mass-email-modal');
 }
 
 // ============ LEAD ACTIONS ============
