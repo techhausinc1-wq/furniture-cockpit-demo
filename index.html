@@ -94,8 +94,10 @@
 
   .progress-note { font-size: 12.5px; color: var(--terracotta); margin-top: 10px; display: none; align-items: center; gap: 8px; }
   .progress-note.active { display: flex; }
-  .spin { width: 13px; height: 13px; border: 2px solid var(--terracotta-bg); border-top-color: var(--terracotta); border-radius: 50%; animation: spin .7s linear infinite; }
+  .spin { width: 13px; height: 13px; border: 2px solid var(--terracotta-bg); border-top-color: var(--terracotta); border-radius: 50%; animation: spin .7s linear infinite; flex-shrink: 0; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  .verify-progress { display: none; align-items: center; gap: 7px; font-size: 12.5px; color: var(--text-dim); }
+  .verify-progress.active { display: flex; }
   .error-note { font-size: 12.5px; color: var(--danger); margin-top: 10px; display: none; }
   .error-note.active { display: block; }
 
@@ -243,6 +245,7 @@
     <a class="btn ghost sm no-print" href="https://techhausinc1-wq.github.io/furniture-cockpit-demo/manual.html" target="_blank" rel="noopener">Manual</a>
     <button class="btn ghost sm no-print" onclick="openTeamModal()">Team</button>
     <button class="btn ghost sm no-print" id="verify-all-btn" onclick="verifyAllLeadsNow()">Verify all</button>
+    <span class="verify-progress no-print" id="verify-progress"><div class="spin"></div><span id="verify-progress-text"></span></span>
     <button class="btn ghost sm no-print" onclick="exportLeadsToExcel()">Export to Excel</button>
     <button class="btn ghost sm no-print" id="sheet-btn-leads" onclick="exportToSheet('leads')">Export to Google Sheet</button>
     <button class="btn ghost sm no-print" onclick="window.print()">Print / Export PDF</button>
@@ -1343,6 +1346,22 @@ async function autoVerifyLeads(ids, onEach) {
 // button is already the confirmation) and by the export functions below
 // (skipConfirm not set, so exporting a big unverified batch asks first
 // rather than silently making someone wait).
+// Shows a spinner + live "N/total" counter in the header (#verify-progress)
+// for the duration of a verify pass, regardless of which caller triggered it
+// -- so "Verify all", Excel export, and Sheet export all give the same
+// visible sign of life instead of leaving someone staring at a frozen page.
+function showVerifyProgress(done, total) {
+  const el = document.getElementById('verify-progress');
+  const text = document.getElementById('verify-progress-text');
+  if (!el || !text) return;
+  el.classList.add('active');
+  text.textContent = `Verifying ${done}/${total}…`;
+}
+function hideVerifyProgress() {
+  const el = document.getElementById('verify-progress');
+  if (el) el.classList.remove('active');
+}
+
 async function verifyUnverifiedLeads(list, opts) {
   const unverified = list.filter(l => !l.verified);
   if (!unverified.length) return;
@@ -1354,8 +1373,12 @@ async function verifyUnverifiedLeads(list, opts) {
   }
   const total = unverified.length;
   let done = 0;
-  toast('Verifying ' + total + ' lead' + (total === 1 ? '' : 's') + '…');
-  await autoVerifyLeads(unverified.map(l => l.id), () => { done++; });
+  showVerifyProgress(0, total);
+  try {
+    await autoVerifyLeads(unverified.map(l => l.id), () => { done++; showVerifyProgress(done, total); });
+  } finally {
+    hideVerifyProgress();
+  }
   toast('Verified ' + done + ' of ' + total + ' lead' + (total === 1 ? '' : 's') + '.');
 }
 
