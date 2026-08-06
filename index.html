@@ -139,7 +139,7 @@
   .cat-wholesaler { background: var(--olive-bg); color: var(--olive); }
   .cat-dealer { background: var(--gold-bg); color: var(--gold); }
   .cat-other { background: var(--bg-3); color: var(--text-mute); border: 1px solid var(--line-2); }
-  .cat-manufacturer { background: var(--terracotta-bg); color: var(--terracotta); }
+  .cat-specifier { background: var(--terracotta-bg); color: var(--terracotta); }
   select.status-select { font-size: 12px; padding: 5px 8px; border-radius: 6px; font-weight: 600; }
   .status-new, .status-assigned { background: var(--bg-3); color: var(--text-dim); }
   .status-contacted { background: var(--gold-bg); color: var(--gold); }
@@ -279,7 +279,7 @@
 
     <div class="panel search-panel no-print">
       <h2>Find new leads</h2>
-      <div class="sub">Searches the web live for real, currently operating companies — reps, dealers, and wholesalers who could carry Modern Line as an additional brand, or peer/partner manufacturers for referrals and representation deals.</div>
+      <div class="sub">Searches the web live for real, currently operating companies — reps, dealers, and wholesalers who could carry Modern Line as an additional brand, or designers/architects/specifiers who select furniture for commercial projects.</div>
       <div class="daily-scout-row">
         <button class="btn primary" id="daily-scout-btn" onclick="runDailyScout()">🔍 Daily Scout</button>
         <span class="daily-scout-hint">Runs every category nationwide, skips anything already in your list, offers to export just today's finds to a Google Sheet.</span>
@@ -292,7 +292,7 @@
             <option value="multi-brand furniture wholesalers and distributors">Multi-brand wholesalers</option>
             <option value="restaurant and hospitality furniture dealers">Restaurant/hospitality dealers</option>
             <option value="foodservice equipment distributors that also sell furniture">Foodservice distributors</option>
-            <option value="commercial/contract/hospitality furniture manufacturers (potential partner manufacturer)">Partner manufacturers</option>
+            <option value="commercial furniture designers, specifiers, architects, FF&E procurement/purchasing agents, and general contractors who select, specify, or purchase furniture for hospitality/commercial projects">Designers / Architects / Specifiers</option>
             <option value="all">All categories</option>
           </select>
         </div>
@@ -920,8 +920,8 @@ function pitchEmailBody(lead) {
   const { firstName } = parseContact(lead.contact);
   const greeting = firstName ? ('Hi ' + firstName + ',') : 'Hi,';
   const intro = 'My name is Vlad Spivak with Modern Line Furniture — we manufacture custom commercial furniture (seating, tables, booths, lounge furniture) for restaurants, hotels, and hospitality spaces, made in the USA.';
-  const ask = lead.category === 'manufacturer'
-    ? 'I came across ' + lead.company + ' and think there could be a good fit for us to work together — whether that\'s referring overflow projects to each other, teaming up on larger bids, or, if you\'re looking to grow your US presence, us helping represent your line here.'
+  const ask = lead.category === 'specifier'
+    ? 'I came across ' + lead.company + ' and think there could be a good fit — whether that\'s specifying our furniture for your hospitality/commercial projects, or, if it\'s useful for your custom projects, us manufacturing under your own label the way we already do for a few design firms.'
     : 'I wanted to reach out because ' + lead.company + ' looks like a great fit to carry our line alongside what you already offer your customers.';
   const close = 'Would you have 15 minutes for a quick call this week to see if it makes sense? I just tried calling — happy to work around your schedule.';
   const sig = 'Best,\nVlad Spivak\nModern Line Furniture\nModernLineFurniture.com\n917-373-3497 (call or text)';
@@ -1579,16 +1579,23 @@ function extractJsonArray(text) {
 // running several categories back-to-back (Daily Scout) doesn't re-suggest
 // the same company across categories within the same run.
 async function searchCategoryForLeads(category, region, keyword, knownSites, progressText) {
-  const isManufacturerSearch = category.indexOf('partner manufacturer') >= 0;
+  // Not other manufacturers -- those are competitors (explicit feedback from
+  // Vlad after live outreach: "we do not need producers or other
+  // manufacturers as they are our competitors"). The real opening he found
+  // is firms who spec/select furniture for commercial projects and either
+  // recommend Modern Line's line, or want Modern Line to privately
+  // manufacture furniture under THEIR OWN brand for their custom projects --
+  // exactly what Harmony Contract Furniture asked for.
+  const isSpecifierSearch = category.indexOf('FF&E procurement') >= 0;
 
-  const system = 'You are a B2B partnerships researcher helping a commercial furniture manufacturer (Modern Line Furniture — custom seating, tables, booths, lounge furniture for restaurants, hotels and hospitality spaces, made in the USA, NJ-based) find real, currently-operating companies to pitch as business partners. ' +
+  const system = 'You are a B2B partnerships researcher helping a commercial furniture manufacturer (Modern Line Furniture — custom seating, tables, booths, lounge furniture for restaurants, hotels and hospitality spaces, made in the USA, NJ-based) find real, currently-operating companies to pitch as sales middlemen. The target is always someone who sells to and invoices the end client directly under their own name/brand (a dealer marking up and reselling, a rep booking the sale, a design/architecture firm private-labeling for its own project) while Modern Line manufactures behind the scenes — never another manufacturer who would compete for the same end customer. ' +
     'Search the web and return ONLY a JSON array (no prose, no markdown). Each item MUST have: {company, website, territory, why (1 sentence explaining the fit), contact}. ' +
     'For "contact", check the company\'s own site (About/Team/Contact pages) and build a single string combining whatever you can actually verify, in this exact order and format, omitting any piece you cannot find: "Ask for: <name>, <title> · <phone> · <email>". ' +
     'A phone number alone (e.g. the general office line) is still useful — always include one if the site publishes one, even without a named contact. Never invent a name, phone number, or email — leave contact as an empty string only if truly nothing is published. ' +
-    'Only include REAL companies with an actual working website you can identify — never invent a company or URL. Unless the search is explicitly for Canadian partner manufacturers, only include companies based in the 48 contiguous US states — never Alaska, Hawaii, or anywhere outside the US (freight cost makes AK/HI impractical for this business). Return 6-10 items.';
-  const userMsg = isManufacturerSearch
+    'Only include REAL companies with an actual working website you can identify — never invent a company or URL. Only include companies based in the 48 contiguous US states — never Alaska, Hawaii, or anywhere outside the US. Return 6-10 items.';
+  const userMsg = isSpecifierSearch
     ? 'Find ' + category + ' covering ' + region + (keyword ? (', specifically related to: ' + keyword) : '') +
-      '. Modern Line Furniture is looking for other furniture manufacturers as potential business allies — either (a) US-based peer manufacturers of similar size who could be referral partners or overflow-capacity subcontractors, or (b) Canadian manufacturers (only Canada, never the UK or elsewhere overseas) that make hospitality/contract furniture but do NOT yet have an established US sales/distribution presence, who might want Modern Line to represent or help distribute their line in the US. Say in "why" which of these two angles applies and briefly why. For "territory", always use a US-state-abbreviation style even for Canadian leads (e.g. "Ontario, Canada", not "Canada (Vaughan, Ontario)") so it matches every other lead in the list. ' +
+      '. Modern Line Furniture is a furniture MANUFACTURER (not looking for other manufacturers -- those are competitors) wanting to connect with firms who select, specify, or purchase furniture for hospitality and commercial projects (hotels, restaurants, offices, other commercial spaces) -- designers, architects, FF&E procurement/purchasing agents, and general contractors all count. These are middlemen: they sell to and invoice their own end client directly, while Modern Line manufactures behind the scenes. Either (a) an ongoing relationship where the firm specs, recommends, or purchases Modern Line\'s furniture for their projects, or (b) a private-label / white-label manufacturing relationship where Modern Line produces custom furniture that the firm then sells under ITS OWN brand for its client projects (a real example: Harmony Contract Furniture came to Modern Line wanting exactly this -- private-label production for her custom projects). Say in "why" which of these angles seems most likely for this specific firm and briefly why. Prioritize firms with real, current hospitality/commercial project work -- not residential-only design firms or purely small-scale decorators. ' +
       'Prioritize companies not already in this list of known sites: ' + Array.from(knownSites).slice(0, 40).join(', ') + '\n\nSearch the web and return the JSON array only.'
     : 'Find ' + category + ' covering ' + region + (keyword ? (', specifically related to: ' + keyword) : '') +
       ' who could plausibly add a new hospitality/restaurant furniture brand to their line card or catalog. Prioritize companies not already in this list of known sites: ' +
@@ -1633,7 +1640,7 @@ async function searchCategoryForLeads(category, region, keyword, knownSites, pro
   if (fresh.length) {
     const payload = fresh.map(it => ({
       company: it.company || '(unnamed)', website: it.website || '',
-      category: isManufacturerSearch ? 'manufacturer' : category.includes('wholesaler') ? 'wholesaler' : category.includes('dealer') || category.includes('distributor') ? 'dealer' : 'rep',
+      category: isSpecifierSearch ? 'specifier' : category.includes('wholesaler') ? 'wholesaler' : category.includes('dealer') || category.includes('distributor') ? 'dealer' : 'rep',
       territory: it.territory || region, why: it.why || '', contact: it.contact || '', source: 'ai-search',
     }));
     try {
@@ -1711,7 +1718,7 @@ const DAILY_SCOUT_CATEGORIES = [
   'multi-brand furniture wholesalers and distributors',
   'restaurant and hospitality furniture dealers',
   'foodservice equipment distributors that also sell furniture',
-  'commercial/contract/hospitality furniture manufacturers (potential partner manufacturer)',
+  'commercial furniture designers, specifiers, architects, FF&E procurement/purchasing agents, and general contractors who select, specify, or purchase furniture for hospitality/commercial projects',
 ];
 async function runDailyScout() {
   const btn = document.getElementById('daily-scout-btn');
