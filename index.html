@@ -1472,7 +1472,11 @@ async function searchCategoryForLeads(category, region, keyword, knownSites, pro
       saved = res.leads;
       leads = saved.concat(leads);
       saved.forEach(l => knownSites.add((l.website || '').toLowerCase().replace(/\/$/, '')));
-      autoVerifyLeads(saved.map(l => l.id));
+      // Wait for verification here instead of firing it off in the
+      // background -- a lead should already have its best contact info by
+      // the time it's handed back, not pop in a few seconds after showing up.
+      if (progressText) progressText.textContent = 'Verifying contact details…';
+      await autoVerifyLeads(saved.map(l => l.id));
     } catch (e) {
       return { saved: [], rawCount: items.length, dupCount, error: 'Found leads but failed to save: ' + e.message };
     }
