@@ -907,6 +907,16 @@ function handleSheetRedirect() {
 // ============ RENDER ============
 function esc(s) { return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
+// Dedup key for a website -- strips protocol, "www.", and a trailing slash
+// so "https://www.acme.com" and "acme.com/" collapse to the same key.
+// Without this, the same company found under two URL variants across
+// different searches saves as two separate duplicate leads (real bug found
+// in the live data: "Downing Management" / "Downing Management Group" and
+// others, differing only by a www. prefix).
+function normalizeSite(url) {
+  return String(url || '').toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '');
+}
+
 // Pull an email/phone/first-name out of the freeform contact string so we can offer
 // one-tap Call / Email actions without needing separate structured fields on the backend.
 function parseContact(contact) {
@@ -1650,7 +1660,7 @@ async function searchCategoryForLeads(category, region, keyword, knownSites, pro
     return { saved: [], rawCount: 0, dupCount: 0, error: lastErr ? lastErr.message : null };
   }
 
-  const fresh = items.filter(it => it.website && !knownSites.has(String(it.website).toLowerCase().replace(/\/$/, '')));
+  const fresh = items.filter(it => it.website && !knownSites.has(normalizeSite(it.website)));
   const dupCount = items.length - fresh.length;
   let saved = [];
   if (fresh.length) {
@@ -1663,7 +1673,7 @@ async function searchCategoryForLeads(category, region, keyword, knownSites, pro
       const res = await fetchJson(MLF_WORKER_URL + '/leads', { method: 'POST', headers: mlfHeaders(), body: JSON.stringify(payload) });
       saved = res.leads;
       leads = saved.concat(leads);
-      saved.forEach(l => knownSites.add((l.website || '').toLowerCase().replace(/\/$/, '')));
+      saved.forEach(l => knownSites.add(normalizeSite(l.website)));
       // Wait for verification here instead of firing it off in the
       // background -- a lead should already have its best contact info by
       // the time it's handed back, not pop in a few seconds after showing up.
@@ -1695,7 +1705,7 @@ async function findLeads() {
   errorBox.classList.remove('active');
   progressText.textContent = 'Searching the web…';
 
-  const knownSites = new Set(leads.map(l => (l.website || '').toLowerCase().replace(/\/$/, '')));
+  const knownSites = new Set(leads.map(l => normalizeSite(l.website)));
   // "All categories" runs the same 5 searches Daily Scout does, but scoped to
   // whatever region/keyword the user actually typed instead of nationwide --
   // e.g. "everything in Texas" instead of "everything, everywhere".
@@ -1739,7 +1749,7 @@ const DAILY_SCOUT_CATEGORIES = [
 async function runDailyScout() {
   const btn = document.getElementById('daily-scout-btn');
   btn.disabled = true;
-  const knownSites = new Set(leads.map(l => (l.website || '').toLowerCase().replace(/\/$/, '')));
+  const knownSites = new Set(leads.map(l => normalizeSite(l.website)));
   let allSaved = [];
   const errors = [];
   for (let i = 0; i < DAILY_SCOUT_CATEGORIES.length; i++) {
