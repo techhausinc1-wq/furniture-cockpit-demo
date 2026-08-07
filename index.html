@@ -917,6 +917,20 @@ function normalizeSite(url) {
   return String(url || '').toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '');
 }
 
+// Cloudflare's email-obfuscation placeholder ("[email protected]") shows up in
+// scraped page text verbatim when a site hides its email from bots -- the AI
+// copies it as if it were a real address. It's actively wrong (worse than no
+// email at all), so strip that one segment out rather than keep the whole
+// contact string. Contact segments are joined with " · ", so drop just the
+// matching segment and rejoin.
+function cleanContact(contact) {
+  return String(contact || '')
+    .split('·')
+    .map(s => s.trim())
+    .filter(s => s && !/\[email[\s ]?protected\]/i.test(s))
+    .join(' · ');
+}
+
 // Pull an email/phone/first-name out of the freeform contact string so we can offer
 // one-tap Call / Email actions without needing separate structured fields on the backend.
 function parseContact(contact) {
@@ -1456,6 +1470,8 @@ async function runVerify(l) {
 // let that downgrade a contact that already names a real person.
 function betterContact(oldContact, newContact) {
   if (!newContact) return null;
+  newContact = cleanContact(newContact);
+  if (!newContact) return null;
   if ((oldContact || '').includes('Ask for:') && !newContact.includes('Ask for:')) return null;
   return newContact;
 }
@@ -1667,7 +1683,7 @@ async function searchCategoryForLeads(category, region, keyword, knownSites, pro
     const payload = fresh.map(it => ({
       company: it.company || '(unnamed)', website: it.website || '',
       category: isSpecifierSearch ? 'specifier' : category.includes('wholesaler') ? 'wholesaler' : category.includes('dealer') || category.includes('distributor') ? 'dealer' : 'rep',
-      territory: it.territory || region, why: it.why || '', contact: it.contact || '', source: 'ai-search',
+      territory: it.territory || region, why: it.why || '', contact: cleanContact(it.contact), source: 'ai-search',
     }));
     try {
       const res = await fetchJson(MLF_WORKER_URL + '/leads', { method: 'POST', headers: mlfHeaders(), body: JSON.stringify(payload) });
