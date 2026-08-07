@@ -293,6 +293,12 @@
             <option value="restaurant and hospitality furniture dealers">Restaurant/hospitality dealers</option>
             <option value="foodservice equipment distributors that also sell furniture">Foodservice distributors</option>
             <option value="commercial furniture designers, specifiers, architects, FF&E procurement/purchasing agents, and general contractors who select, specify, or purchase furniture for hospitality/commercial projects">Designers / Architects / Specifiers</option>
+            <option value="hotel management companies who run centralized furniture purchasing and renovation programs across their multi-property portfolios">Hotel management companies</option>
+            <option value="restaurant chain and franchise development/construction departments who source FF&E for new unit buildouts across their franchisee locations">Restaurant chain development</option>
+            <option value="hotel Property Improvement Plan (PIP) renovation contractors who manage furniture replacement cycles for hotel owners on behalf of brand-mandated renovations">Hotel PIP contractors</option>
+            <option value="casino and gaming venue FF&E procurement agents and purchasing departments who source lounge, restaurant, and gaming floor furniture">Casino / gaming procurement</option>
+            <option value="senior living and assisted living facility FF&E procurement firms and purchasing agents">Senior living procurement</option>
+            <option value="event, trade show, and corporate furniture rental and staging companies who supply furniture to events and conferences rather than manufacture it">Event / rental furniture cos.</option>
             <option value="all">All categories</option>
           </select>
         </div>
@@ -1632,6 +1638,20 @@ function extractJsonArray(text) {
 // found. knownSites is mutated in place with newly-saved sites so a caller
 // running several categories back-to-back (Daily Scout) doesn't re-suggest
 // the same company across categories within the same run.
+// Every category in this bucket gets the same "middleman procurer, not
+// manufacturer" framing below -- checked by exact value match, not a
+// substring guess, since several of these legitimately contain overlapping
+// words ("FF&E procurement" appears in more than one) and a substring check
+// would silently misclassify whichever one doesn't happen to match.
+const SPECIFIER_CATEGORIES = new Set([
+  'commercial furniture designers, specifiers, architects, FF&E procurement/purchasing agents, and general contractors who select, specify, or purchase furniture for hospitality/commercial projects',
+  'hotel management companies who run centralized furniture purchasing and renovation programs across their multi-property portfolios',
+  'restaurant chain and franchise development/construction departments who source FF&E for new unit buildouts across their franchisee locations',
+  'hotel Property Improvement Plan (PIP) renovation contractors who manage furniture replacement cycles for hotel owners on behalf of brand-mandated renovations',
+  'casino and gaming venue FF&E procurement agents and purchasing departments who source lounge, restaurant, and gaming floor furniture',
+  'senior living and assisted living facility FF&E procurement firms and purchasing agents',
+  'event, trade show, and corporate furniture rental and staging companies who supply furniture to events and conferences rather than manufacture it',
+]);
 async function searchCategoryForLeads(category, region, keyword, knownSites, progressText) {
   // Not other manufacturers -- those are competitors (explicit feedback from
   // Vlad after live outreach: "we do not need producers or other
@@ -1640,7 +1660,7 @@ async function searchCategoryForLeads(category, region, keyword, knownSites, pro
   // recommend Modern Line's line, or want Modern Line to privately
   // manufacture furniture under THEIR OWN brand for their custom projects --
   // exactly what Harmony Contract Furniture asked for.
-  const isSpecifierSearch = category.indexOf('FF&E procurement') >= 0;
+  const isSpecifierSearch = SPECIFIER_CATEGORIES.has(category);
 
   const system = 'You are a B2B partnerships researcher helping a commercial furniture manufacturer (Modern Line Furniture — custom seating, tables, booths, lounge furniture for restaurants, hotels and hospitality spaces, made in the USA, NJ-based) find real, currently-operating companies to pitch as sales middlemen. The rule in one line: THEY get us the contract, WE make the furniture. The target always brings or lands the deal and sells to/invoices the end client directly under their own name (a dealer marking up and reselling, a rep booking the sale and earning commission, an FF&E procurement agent buying on behalf of a hotel, a design/architecture firm private-labeling for its own project) while Modern Line does 100% of the manufacturing behind the scenes, never visible to the end customer. Never another manufacturer, who would compete for the same end customer and the same contract. ' +
     'Search the web and return ONLY a JSON array (no prose, no markdown). Each item MUST have: {company, website, territory, why (1 sentence explaining the fit), contact}. ' +
@@ -1773,6 +1793,12 @@ const DAILY_SCOUT_CATEGORIES = [
   'restaurant and hospitality furniture dealers',
   'foodservice equipment distributors that also sell furniture',
   'commercial furniture designers, specifiers, architects, FF&E procurement/purchasing agents, and general contractors who select, specify, or purchase furniture for hospitality/commercial projects',
+  'hotel management companies who run centralized furniture purchasing and renovation programs across their multi-property portfolios',
+  'restaurant chain and franchise development/construction departments who source FF&E for new unit buildouts across their franchisee locations',
+  'hotel Property Improvement Plan (PIP) renovation contractors who manage furniture replacement cycles for hotel owners on behalf of brand-mandated renovations',
+  'casino and gaming venue FF&E procurement agents and purchasing departments who source lounge, restaurant, and gaming floor furniture',
+  'senior living and assisted living facility FF&E procurement firms and purchasing agents',
+  'event, trade show, and corporate furniture rental and staging companies who supply furniture to events and conferences rather than manufacture it',
 ];
 async function runDailyScout() {
   const btn = document.getElementById('daily-scout-btn');
