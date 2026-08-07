@@ -826,19 +826,22 @@ function downloadCsv(filename, csv) {
   URL.revokeObjectURL(url);
 }
 async function exportLeadsToExcel() {
-  const headers = ['Company', 'Website', 'Category', 'Territory', 'Why it fits', 'Contact', 'Status', 'Assigned to', 'Assign note', 'Verified', 'Notes', 'Source'];
+  const headers = ['Company', 'Website', 'Category', 'Territory', 'Why it fits', 'Contact Name', 'Phone', 'Email', 'Status', 'Assigned to', 'Assign note', 'Verified', 'Notes', 'Source'];
   // Export just the checked rows if any are checked; otherwise export everything, same as before.
   const scopeIds = selectedLeadIds.size ? Array.from(selectedLeadIds) : leads.map(l => l.id);
   await verifyUnverifiedLeads(leads.filter(l => scopeIds.includes(l.id)));
   // Re-read from `leads` after verifying -- verify replaces lead objects in place, the
   // array captured above would still point at the pre-verify (stale contact) versions.
   const source = leads.filter(l => scopeIds.includes(l.id));
-  const rows = source.slice().sort((a, b) => a.company.localeCompare(b.company)).map(l => [
-    l.company, l.website, l.category, l.territory, l.why, l.contact, l.status,
-    l.assignedToName || '', l.assignNote || '',
-    l.verified ? (l.verified.ok ? 'Verified ' + l.verified.date : 'Flagged ' + l.verified.date) : '',
-    l.notes, l.source,
-  ]);
+  const rows = source.slice().sort((a, b) => a.category.localeCompare(b.category) || a.company.localeCompare(b.company)).map(l => {
+    const { name, phone, email } = parseContact(l.contact);
+    return [
+      l.company, l.website, l.category, l.territory, l.why, name, phone, email, l.status,
+      l.assignedToName || '', l.assignNote || '',
+      l.verified ? (l.verified.ok ? 'Verified ' + l.verified.date : 'Flagged ' + l.verified.date) : '',
+      l.notes, l.source,
+    ];
+  });
   downloadCsv('modern-line-leads-' + new Date().toISOString().slice(0, 10) + '.csv', toCsv([headers, ...rows]));
   toast('Exported ' + rows.length + ' leads to Excel');
 }
@@ -912,7 +915,9 @@ function parseContact(contact) {
   const phone = (c.match(/(\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/) || [])[0] || '';
   const nameMatch = c.match(/Ask for:\s*([^,·]+)/);
   const firstName = nameMatch ? nameMatch[1].trim().split(/\s+/)[0] : '';
-  return { email, phone, firstName };
+  const fullNameMatch = c.match(/Ask for:\s*([^·]+?)(?:\s*·|$)/);
+  const name = fullNameMatch ? fullNameMatch[1].trim() : '';
+  return { email, phone, firstName, name };
 }
 // The default draft that opens when Email is clicked -- meant for the "called, no
 // answer, follow up right away" flow, so it has to stand on its own with no editing.
