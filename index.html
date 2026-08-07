@@ -17,6 +17,12 @@
     --terracotta: #b85c3b; --terracotta-bg: #f3e2da;
     --olive: #5e6e3d; --olive-bg: #e9edda;
     --gold: #b08236; --gold-bg: #f2e6cd;
+    --slate: #3d5a73; --slate-bg: #dfe8ee;
+    --rust: #a1432e; --rust-bg: #f5ddd6;
+    --plum: #6b4570; --plum-bg: #ece0ee;
+    --sage: #4a7856; --sage-bg: #dfeee2;
+    --clay: #8a5a3a; --clay-bg: #ecdfd0;
+    --teal: #2a7a7a; --teal-bg: #dbeeee;
     --danger: #b23b3b; --danger-bg: #f5dede;
     --radius: 10px;
     --shadow: 0 1px 2px rgba(28,31,42,.05), 0 6px 20px rgba(28,31,42,.06);
@@ -140,6 +146,12 @@
   .cat-dealer { background: var(--gold-bg); color: var(--gold); }
   .cat-other { background: var(--bg-3); color: var(--text-mute); border: 1px solid var(--line-2); }
   .cat-specifier { background: var(--terracotta-bg); color: var(--terracotta); }
+  .cat-hotel-mgmt { background: var(--slate-bg); color: var(--slate); }
+  .cat-restaurant-chain { background: var(--rust-bg); color: var(--rust); }
+  .cat-hotel-pip { background: var(--plum-bg); color: var(--plum); }
+  .cat-casino { background: var(--sage-bg); color: var(--sage); }
+  .cat-senior-living { background: var(--clay-bg); color: var(--clay); }
+  .cat-event-rental { background: var(--teal-bg); color: var(--teal); }
   select.status-select { font-size: 12px; padding: 5px 8px; border-radius: 6px; font-weight: 600; }
   .status-new, .status-assigned { background: var(--bg-3); color: var(--text-dim); }
   .status-contacted { background: var(--gold-bg); color: var(--gold); }
@@ -430,7 +442,14 @@
           <select id="lf-category">
             <option value="rep">Manufacturer's rep</option>
             <option value="wholesaler">Multi-brand wholesaler</option>
-            <option value="dealer">Dealer</option>
+            <option value="dealer">Dealer / distributor</option>
+            <option value="specifier">Designer / architect / specifier</option>
+            <option value="hotel-mgmt">Hotel management company</option>
+            <option value="restaurant-chain">Restaurant chain development</option>
+            <option value="hotel-pip">Hotel PIP contractor</option>
+            <option value="casino">Casino / gaming procurement</option>
+            <option value="senior-living">Senior living procurement</option>
+            <option value="event-rental">Event / rental furniture co.</option>
             <option value="other">Other</option>
           </select>
         </div>
@@ -1678,6 +1697,25 @@ const SPECIFIER_CATEGORIES = new Set([
   'senior living and assisted living facility FF&E procurement firms and purchasing agents',
   'event, trade show, and corporate furniture rental and staging companies who supply furniture to events and conferences rather than manufacture it',
 ]);
+// Maps every search-category string to the short storage code shown as the
+// row's category pill. Exact match, not substring -- a substring check
+// (category.includes('dealer') etc.) silently dumped all 6 newer categories
+// below into 'rep' since none of their descriptions contain "wholesaler",
+// "dealer", or "distributor". Keep in sync with CATEGORY_CODE_MAP in
+// igor-hq/worker/main.ts.
+const CATEGORY_CODE_MAP = {
+  "manufacturer's rep firms / contract furniture representatives": 'rep',
+  'multi-brand furniture wholesalers and distributors': 'wholesaler',
+  'restaurant and hospitality furniture dealers': 'dealer',
+  'foodservice equipment distributors that also sell furniture': 'dealer',
+  'commercial furniture designers, specifiers, architects, FF&E procurement/purchasing agents, and general contractors who select, specify, or purchase furniture for hospitality/commercial projects': 'specifier',
+  'hotel management companies who run centralized furniture purchasing and renovation programs across their multi-property portfolios': 'hotel-mgmt',
+  'restaurant chain and franchise development/construction departments who source FF&E for new unit buildouts across their franchisee locations': 'restaurant-chain',
+  'hotel Property Improvement Plan (PIP) renovation contractors who manage furniture replacement cycles for hotel owners on behalf of brand-mandated renovations': 'hotel-pip',
+  'casino and gaming venue FF&E procurement agents and purchasing departments who source lounge, restaurant, and gaming floor furniture': 'casino',
+  'senior living and assisted living facility FF&E procurement firms and purchasing agents': 'senior-living',
+  'event, trade show, and corporate furniture rental and staging companies who supply furniture to events and conferences rather than manufacture it': 'event-rental',
+};
 async function searchCategoryForLeads(category, region, keyword, knownSites, progressText) {
   // Not other manufacturers -- those are competitors (explicit feedback from
   // Vlad after live outreach: "we do not need producers or other
@@ -1740,7 +1778,7 @@ async function searchCategoryForLeads(category, region, keyword, knownSites, pro
   if (fresh.length) {
     const payload = fresh.map(it => ({
       company: it.company || '(unnamed)', website: it.website || '',
-      category: isSpecifierSearch ? 'specifier' : category.includes('wholesaler') ? 'wholesaler' : category.includes('dealer') || category.includes('distributor') ? 'dealer' : 'rep',
+      category: CATEGORY_CODE_MAP[category] || 'rep',
       territory: it.territory || region, why: it.why || '', contact: cleanContact(it.contact), source: 'ai-search',
     }));
     try {
