@@ -1423,8 +1423,9 @@ async function submitAssignForm(evt) {
 // ============ VERIFY (AI-assisted) ============
 // Shared by the manual "Verify" button and auto-verify below.
 async function runVerify(l) {
-  const system = 'You verify B2B sales leads. Given a company name and website, search the web to confirm: (1) does the company still exist and does the website work, (2) is there a better/more specific contact (email, phone, or a "become a vendor/rep" page URL) than what\'s already known. ' +
-    'Return ONLY a JSON object (no prose): {ok: true/false, contact: "best contact info found, or empty string", note: "one short sentence"}.';
+  const system = 'You verify B2B sales leads. Given a company name and website, search the web to confirm: (1) does the company still exist and does the website work, (2) is there a better/more specific contact (a named person, email, phone, or a "become a vendor/rep" page URL) than what\'s already known -- check the site\'s About/Team/Contact pages for an actual name and title, not just a general office line. ' +
+    'For "contact", build a single string combining whatever you can actually verify, in this exact order and format, omitting any piece you cannot find: "Ask for: <name>, <title> · <phone> · <email>". Never invent a name -- leave it out of the string entirely if the site doesn\'t publish one. ' +
+    'Return ONLY a JSON object (no prose): {ok: true/false, contact: "formatted contact string, or empty string if truly nothing found", note: "one short sentence"}.';
   const userMsg = 'Company: ' + l.company + '\nWebsite: ' + l.website + '\nKnown contact: ' + (l.contact || 'none') + '\n\nVerify and return JSON only.';
   const res = await fetchJson(AI_WORKER_URL, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1440,6 +1441,14 @@ async function runVerify(l) {
   const start = text.indexOf('{'), end = text.lastIndexOf('}');
   return JSON.parse(text.slice(start, end + 1));
 }
+// Verify's own search can come back with less than the original search
+// already had (e.g. it finds the phone but not the name this time) -- never
+// let that downgrade a contact that already names a real person.
+function betterContact(oldContact, newContact) {
+  if (!newContact) return null;
+  if ((oldContact || '').includes('Ask for:') && !newContact.includes('Ask for:')) return null;
+  return newContact;
+}
 
 async function verifyLead(id) {
   const l = leads.find(x => x.id === id); if (!l) return;
@@ -1448,7 +1457,8 @@ async function verifyLead(id) {
     const parsed = await runVerify(l);
     const verified = { ok: !!parsed.ok, date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) };
     const patch = { verified };
-    if (parsed.contact) patch.contact = parsed.contact;
+    const nextContact = betterContact(l.contact, parsed.contact);
+    if (nextContact) patch.contact = nextContact;
     const updated = await fetchJson(MLF_WORKER_URL + '/leads/' + id, { method: 'PATCH', headers: mlfHeaders(), body: JSON.stringify(patch) });
     leads = leads.map(x => x.id === id ? updated : x);
     renderAll();
@@ -1477,7 +1487,8 @@ async function autoVerifyLeads(ids, onEach) {
         const parsed = await runVerify(l);
         const verified = { ok: !!parsed.ok, date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) };
         const patch = { verified };
-        if (parsed.contact) patch.contact = parsed.contact;
+        const nextContact = betterContact(l.contact, parsed.contact);
+        if (nextContact) patch.contact = nextContact;
         const updated = await fetchJson(MLF_WORKER_URL + '/leads/' + id, { method: 'PATCH', headers: mlfHeaders(), body: JSON.stringify(patch) });
         leads = leads.map(x => x.id === id ? updated : x);
         renderAll();
