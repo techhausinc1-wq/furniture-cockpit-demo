@@ -838,7 +838,7 @@ async function exportLeadsToExcel() {
     return [
       l.company, l.website, l.category, l.territory, l.why, name, phone, email, l.status,
       l.assignedToName || '', l.assignNote || '',
-      l.verified ? (l.verified.ok ? 'Verified ' + l.verified.date : 'Flagged ' + l.verified.date) : '',
+      l.verified ? (l.verified.ok ? 'Verified ' + l.verified.date : 'Flagged ' + l.verified.date + (l.verified.note ? ' — ' + l.verified.note : '')) : '',
       l.notes, l.source,
     ];
   });
@@ -1245,7 +1245,7 @@ function renderLeads() {
           <td class="no-print"><input type="checkbox" class="lead-checkbox" ${selectedLeadIds.has(l.id) ? 'checked' : ''} onchange="toggleLeadSelection('${l.id}', this.checked)"></td>
           <td>
             <div class="lead-name"><span class="lead-name-link" onclick="openLeadDetail('${l.id}')">${esc(l.company)}</span>${l.website ? ` <a href="${esc(l.website)}" target="_blank" rel="noopener" class="lead-site-link" title="Visit website" onclick="event.stopPropagation()">↗</a>` : ''}</div>
-            ${l.verified ? `<span class="verify-badge verify-${l.verified.ok ? 'live' : 'stale'}">${l.verified.ok ? 'Verified ' + esc(l.verified.date) : 'Flagged ' + esc(l.verified.date)}</span>` : ''}
+            ${l.verified ? `<span class="verify-badge verify-${l.verified.ok ? 'live' : 'stale'}" ${l.verified.note ? `title="${esc(l.verified.note)}"` : ''}>${l.verified.ok ? 'Verified ' + esc(l.verified.date) : 'Flagged ' + esc(l.verified.date)}</span>` : ''}
             ${l.assignedTo ? `<div class="assign-badge">→ ${esc(l.assignedToName)}${l.assignNote ? `<span class="assign-note-text">"${esc(l.assignNote)}"</span>` : ''}</div>` : ''}
           </td>
           <td><span class="cat-pill cat-${esc(l.category)}">${esc(l.category)}</span></td>
@@ -1312,7 +1312,7 @@ function openLeadDetail(id) {
     <div class="detail-row"><label>Contact</label><div>${renderContactCell(l)}</div></div>
     <div class="detail-row"><label>Status</label><div>${esc(l.status)}</div></div>
     ${l.assignedTo ? `<div class="detail-row"><label>Assigned to</label><div>${esc(l.assignedToName)}${l.assignNote ? ' — "' + esc(l.assignNote) + '"' : ''}</div></div>` : ''}
-    ${l.verified ? `<div class="detail-row"><label>Verified</label><div>${l.verified.ok ? 'Yes, ' + esc(l.verified.date) : 'Flagged, ' + esc(l.verified.date)}</div></div>` : ''}
+    ${l.verified ? `<div class="detail-row"><label>Verified</label><div>${l.verified.ok ? 'Yes, ' + esc(l.verified.date) : 'Flagged, ' + esc(l.verified.date)}${l.verified.note ? ' — ' + esc(l.verified.note) : ''}</div></div>` : ''}
     ${l.notes ? `<div class="detail-row"><label>Notes</label><div>${esc(l.notes)}</div></div>` : ''}
     <div class="detail-row"><label>Source</label><div>${esc(l.source)}</div></div>
   `;
@@ -1481,7 +1481,7 @@ async function verifyLead(id) {
   toast('Verifying ' + l.company + '…');
   try {
     const parsed = await runVerify(l);
-    const verified = { ok: !!parsed.ok, date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) };
+    const verified = { ok: !!parsed.ok, date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), note: parsed.note || '' };
     const patch = { verified };
     const nextContact = betterContact(l.contact, parsed.contact);
     if (nextContact) patch.contact = nextContact;
@@ -1511,7 +1511,7 @@ async function autoVerifyLeads(ids, onEach) {
       if (!l) { if (onEach) onEach(); continue; }
       try {
         const parsed = await runVerify(l);
-        const verified = { ok: !!parsed.ok, date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) };
+        const verified = { ok: !!parsed.ok, date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), note: parsed.note || '' };
         const patch = { verified };
         const nextContact = betterContact(l.contact, parsed.contact);
         if (nextContact) patch.contact = nextContact;
