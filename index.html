@@ -316,6 +316,7 @@
       <button class="filter-chip" data-filter="mine" onclick="setFilter('mine')">Assigned to me</button>
       <button class="filter-chip" data-filter="new" onclick="setFilter('new')">New</button>
       <button class="filter-chip" data-filter="contacted" onclick="setFilter('contacted')">Contacted</button>
+      <button class="filter-chip" data-filter="followup" onclick="setFilter('followup')" id="followup-chip">Needs follow-up</button>
       <button class="filter-chip" data-filter="responded" onclick="setFilter('responded')">Responded</button>
       <button class="filter-chip" data-filter="partner" onclick="setFilter('partner')">Partner</button>
       <div class="spacer"></div>
@@ -1220,10 +1221,19 @@ function goHome() {
   setFilter('all');
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
+// Contacted 5+ days ago with no response yet -- the whole point of stamping
+// contactedAt is so this can surface itself instead of relying on someone
+// remembering to check back.
+const FOLLOWUP_DAYS = 5;
+function needsFollowUp(l) {
+  return l.status === 'contacted' && l.contactedAt && (Date.now() - l.contactedAt) > FOLLOWUP_DAYS * 24 * 60 * 60 * 1000;
+}
+function daysSince(ts) { return Math.floor((Date.now() - ts) / (24 * 60 * 60 * 1000)); }
 function renderLeads() {
   const wrap = document.getElementById('leads-wrap');
   let shown = leads.slice().sort((a, b) => b.createdAt - a.createdAt);
   if (currentFilter === 'mine') shown = shown.filter(l => l.assignedTo === session.id);
+  else if (currentFilter === 'followup') shown = shown.filter(needsFollowUp);
   else if (currentFilter !== 'all') shown = shown.filter(l => l.status === currentFilter);
 
   if (!shown.length) {
@@ -1261,6 +1271,7 @@ function renderLeads() {
               <option value="partner" ${l.status==='partner'?'selected':''}>Partner</option>
               <option value="dead" ${l.status==='dead'?'selected':''}>Dead end</option>
             </select>
+            ${needsFollowUp(l) ? `<div class="assign-badge" style="color:#b03a2e">⚠ ${daysSince(l.contactedAt)}d, no response</div>` : (l.status === 'contacted' && l.contactedAt ? `<div class="assign-badge">${daysSince(l.contactedAt)}d ago</div>` : '')}
           </td>
           <td class="no-print">
             <div class="row-actions">
@@ -1288,6 +1299,7 @@ function toggleLeadSelection(id, checked) {
 function toggleSelectAllLeads(checked) {
   let shown = leads.slice();
   if (currentFilter === 'mine') shown = shown.filter(l => l.assignedTo === session.id);
+  else if (currentFilter === 'followup') shown = shown.filter(needsFollowUp);
   else if (currentFilter !== 'all') shown = shown.filter(l => l.status === currentFilter);
   shown.forEach(l => { if (checked) selectedLeadIds.add(l.id); else selectedLeadIds.delete(l.id); });
   renderLeads();
