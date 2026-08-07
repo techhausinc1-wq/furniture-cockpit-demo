@@ -439,19 +439,7 @@
         <div><label>Company name</label><input type="text" id="lf-company" required></div>
         <div><label>Website</label><input type="text" id="lf-website" placeholder="https://"></div>
         <div><label>Category</label>
-          <select id="lf-category">
-            <option value="rep">Manufacturer's rep</option>
-            <option value="wholesaler">Multi-brand wholesaler</option>
-            <option value="dealer">Dealer / distributor</option>
-            <option value="specifier">Designer / architect / specifier</option>
-            <option value="hotel-mgmt">Hotel management company</option>
-            <option value="restaurant-chain">Restaurant chain development</option>
-            <option value="hotel-pip">Hotel PIP contractor</option>
-            <option value="casino">Casino / gaming procurement</option>
-            <option value="senior-living">Senior living procurement</option>
-            <option value="event-rental">Event / rental furniture co.</option>
-            <option value="other">Other</option>
-          </select>
+          <select id="lf-category"></select>
         </div>
         <div><label>Territory</label><input type="text" id="lf-territory" placeholder="e.g. Southeast US"></div>
         <div><label>Why it's a fit</label><textarea id="lf-why" rows="2"></textarea></div>
@@ -1344,7 +1332,7 @@ function openLeadDetail(id) {
   const body = document.getElementById('lead-detail-body');
   body.innerHTML = `
     <div class="detail-row"><label>Company</label><div>${esc(l.company)}${l.website ? ` — <a href="${esc(l.website)}" target="_blank" rel="noopener">${esc(l.website)} ↗</a>` : ''}</div></div>
-    <div class="detail-row"><label>Category</label><div><span class="cat-pill cat-${esc(l.category)}">${esc(l.category)}</span></div></div>
+    <div class="detail-row"><label>Category</label><div><select class="status-select" onchange="updateLeadCategory('${l.id}', this.value)">${leadCategoryOptionsHtml(l.category)}</select></div></div>
     <div class="detail-row"><label>Territory</label><div>${esc(l.territory)}</div></div>
     <div class="detail-row"><label>Why it fits</label><div>${esc(l.why)}</div></div>
     <div class="detail-row"><label>Contact</label><div>${renderContactCell(l)}</div></div>
@@ -1441,6 +1429,14 @@ async function updateStatus(id, status) {
     const updated = await fetchJson(MLF_WORKER_URL + '/leads/' + id, { method: 'PATCH', headers: mlfHeaders(), body: JSON.stringify({ status }) });
     leads = leads.map(l => l.id === id ? updated : l);
     renderAll();
+  } catch (e) { toast('Update failed: ' + e.message); }
+}
+async function updateLeadCategory(id, category) {
+  try {
+    const updated = await fetchJson(MLF_WORKER_URL + '/leads/' + id, { method: 'PATCH', headers: mlfHeaders(), body: JSON.stringify({ category }) });
+    leads = leads.map(l => l.id === id ? updated : l);
+    renderAll();
+    toast('Category updated');
   } catch (e) { toast('Update failed: ' + e.message); }
 }
 async function deleteLead(id) {
@@ -1716,6 +1712,26 @@ const CATEGORY_CODE_MAP = {
   'senior living and assisted living facility FF&E procurement firms and purchasing agents': 'senior-living',
   'event, trade show, and corporate furniture rental and staging companies who supply furniture to events and conferences rather than manufacture it': 'event-rental',
 };
+// The short storage codes a lead's category can actually be, with a human
+// label -- used both for "Add lead manually" and for editing an existing
+// lead's category in its detail card. Keep in sync with the .cat-* pill
+// styles above and MLF_CATEGORY_CODE_MAP's value set in igor-hq/worker/main.ts.
+const LEAD_CATEGORY_OPTIONS = [
+  { value: 'rep', label: "Manufacturer's rep" },
+  { value: 'wholesaler', label: 'Multi-brand wholesaler' },
+  { value: 'dealer', label: 'Dealer / distributor' },
+  { value: 'specifier', label: 'Designer / architect / specifier' },
+  { value: 'hotel-mgmt', label: 'Hotel management company' },
+  { value: 'restaurant-chain', label: 'Restaurant chain development' },
+  { value: 'hotel-pip', label: 'Hotel PIP contractor' },
+  { value: 'casino', label: 'Casino / gaming procurement' },
+  { value: 'senior-living', label: 'Senior living procurement' },
+  { value: 'event-rental', label: 'Event / rental furniture co.' },
+  { value: 'other', label: 'Other' },
+];
+function leadCategoryOptionsHtml(selected) {
+  return LEAD_CATEGORY_OPTIONS.map(o => `<option value="${o.value}" ${o.value === selected ? 'selected' : ''}>${o.label}</option>`).join('');
+}
 async function searchCategoryForLeads(category, region, keyword, knownSites, progressText) {
   // Not other manufacturers -- those are competitors (explicit feedback from
   // Vlad after live outreach: "we do not need producers or other
@@ -1895,7 +1911,11 @@ async function runDailyScout() {
 }
 
 // ============ MANUAL ADD ============
-function openAddModal() { document.getElementById('lead-form').reset(); openModal('lead-modal'); }
+function openAddModal() {
+  document.getElementById('lead-form').reset();
+  document.getElementById('lf-category').innerHTML = leadCategoryOptionsHtml('rep');
+  openModal('lead-modal');
+}
 async function submitLeadForm(evt) {
   evt.preventDefault();
   const payload = {
