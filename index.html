@@ -1694,10 +1694,11 @@ const SPECIFIER_CATEGORIES = new Set([
   'event, trade show, and corporate furniture rental and staging companies who supply furniture to events and conferences rather than manufacture it',
 ]);
 // Maps every search-category string to the short storage code shown as the
-// row's category pill. Exact match, not substring -- a substring check
-// (category.includes('dealer') etc.) silently dumped all 6 newer categories
-// below into 'rep' since none of their descriptions contain "wholesaler",
-// "dealer", or "distributor". Keep in sync with CATEGORY_CODE_MAP in
+// row's category pill. Exact match, not substring -- the old ternary
+// (isSpecifierSearch ? 'specifier' : ...) collapsed all 7 SPECIFIER_CATEGORIES
+// members into a single 'specifier' code, silently losing the distinction
+// between e.g. a casino procurement lead and an actual designer/architect.
+// Keep in sync with CATEGORY_CODE_MAP in
 // igor-hq/worker/main.ts.
 const CATEGORY_CODE_MAP = {
   "manufacturer's rep firms / contract furniture representatives": 'rep',
