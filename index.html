@@ -329,6 +329,7 @@
       <button class="btn ghost sm no-print" id="reload-btn" onclick="reloadLeads()">Refresh</button>
       <button class="btn ghost sm no-print" onclick="openAddModal()">+ Add lead manually</button>
       <button class="btn ghost sm no-print" onclick="openMassEmailModal()">Email selected</button>
+      <button class="btn ghost sm no-print" id="delete-selected-btn" onclick="deleteSelectedLeads()" style="color:#b03a2e">Remove selected</button>
     </div>
 
     <div id="leads-wrap"></div>
@@ -1431,6 +1432,31 @@ async function deleteLead(id) {
     renderAll();
     toast('Lead removed');
   } catch (e) { toast('Remove failed: ' + e.message); }
+}
+// Bulk delete via the same checkboxes used for export/mass-email -- one
+// click instead of clicking Remove N times (the actual complaint that
+// prompted this: clearing 176 old leads one at a time to start fresh).
+// No selection at all = every currently-shown lead, mirroring how the
+// export buttons already treat "nothing checked."
+async function deleteSelectedLeads() {
+  const scopeIds = selectedLeadIds.size ? Array.from(selectedLeadIds) : leads.map(l => l.id);
+  if (!scopeIds.length) return toast('Nothing to remove');
+  const label = selectedLeadIds.size ? scopeIds.length + ' selected lead' + (scopeIds.length === 1 ? '' : 's') : 'ALL ' + scopeIds.length + ' leads';
+  if (!confirm('Remove ' + label + '? This cannot be undone.')) return;
+  const btn = document.getElementById('delete-selected-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Removing…'; }
+  let done = 0, failed = 0;
+  for (const id of scopeIds) {
+    try {
+      await fetchJson(MLF_WORKER_URL + '/leads/' + id, { method: 'DELETE', headers: mlfHeaders() });
+      done++;
+    } catch (e) { failed++; }
+  }
+  leads = leads.filter(l => !scopeIds.includes(l.id));
+  selectedLeadIds.clear();
+  renderAll();
+  if (btn) { btn.disabled = false; btn.textContent = 'Remove selected'; }
+  toast('Removed ' + done + ' lead' + (done === 1 ? '' : 's') + (failed ? ' (' + failed + ' failed)' : ''));
 }
 
 // ============ ASSIGN ("send to Wendy") ============
