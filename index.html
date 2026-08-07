@@ -279,7 +279,7 @@
 
     <div class="panel search-panel no-print">
       <h2>Find new leads</h2>
-      <div class="sub">Searches the web live for real, currently operating companies — reps, dealers, and wholesalers who could carry Modern Line as an additional brand, or designers/architects/specifiers who select furniture for commercial projects.</div>
+      <div class="sub">Searches the web live for real, currently operating companies — reps, dealers, and wholesalers who'd buy from us and invoice their own customers directly, or designers/architects/specifiers/procurement firms who select furniture for commercial projects. We're in their rolodex; the invoice comes from them, not from Modern Line.</div>
       <div class="daily-scout-row">
         <button class="btn primary" id="daily-scout-btn" onclick="runDailyScout()">🔍 Daily Scout</button>
         <span class="daily-scout-hint">Runs every category nationwide, skips anything already in your list, offers to export just today's finds to a Google Sheet.</span>
@@ -1698,7 +1698,7 @@ async function searchCategoryForLeads(category, region, keyword, knownSites, pro
       '. Modern Line Furniture is a furniture MANUFACTURER (not looking for other manufacturers -- those are competitors) wanting to connect with firms who select, specify, or purchase furniture for hospitality and commercial projects (hotels, restaurants, offices, other commercial spaces) -- designers, architects, FF&E procurement/purchasing agents, and general contractors all count. These are middlemen: they sell to and invoice their own end client directly, while Modern Line manufactures behind the scenes. Either (a) an ongoing relationship where the firm specs, recommends, or purchases Modern Line\'s furniture for their projects, or (b) a private-label / white-label manufacturing relationship where Modern Line produces custom furniture that the firm then sells under ITS OWN brand for its client projects (a real example: Harmony Contract Furniture came to Modern Line wanting exactly this -- private-label production for her custom projects). Say in "why" which of these angles seems most likely for this specific firm and briefly why. Prioritize firms with real, current hospitality/commercial project work -- not residential-only design firms or purely small-scale decorators. ' +
       'Prioritize companies not already in this list of known sites: ' + Array.from(knownSites).slice(0, 40).join(', ') + '\n\nSearch the web and return the JSON array only.'
     : 'Find ' + category + ' covering ' + region + (keyword ? (', specifically related to: ' + keyword) : '') +
-      ' who could plausibly add a new hospitality/restaurant furniture brand to their line card or catalog -- they bring in the deal and sell/invoice the end customer directly, Modern Line just manufactures. Prioritize companies not already in this list of known sites: ' +
+      ' who could plausibly buy Modern Line\'s furniture and resell it as their own -- NOT as a named "Modern Line" branded line in their catalog, but invoiced and presented under THEIR OWN name to the end customer, the same way any wholesale goods work. They bring in the deal and own the customer relationship end to end; Modern Line stays invisible behind the scenes as the manufacturer. Prioritize companies not already in this list of known sites: ' +
       Array.from(knownSites).slice(0, 40).join(', ') + '\n\nSearch the web and return the JSON array only.';
 
   const budgets = [5, 3];
