@@ -1503,26 +1503,51 @@ async function submitAssignForm(evt) {
   } catch (e) { toast('Send failed: ' + e.message); }
 }
 
-// ============ VERIFY (AI-assisted) ============
+// ============ VERIFY (real fetch + AI-assisted contact lookup) ============
 // Shared by the manual "Verify" button and auto-verify below.
+// A real HTTP fetch of the site (server-side, via /mlf/check-url -- no CORS
+// issue) is the authoritative "does this link actually work" signal, not an
+// AI web_search inference. web_search can find old cached mentions, Yelp/
+// LinkedIn/directory listings referencing a company's domain and conclude
+// "yes this exists" without ever loading the CURRENT state of that exact
+// domain -- which is exactly how repeated dead/parked domains got marked
+// "Verified" before this existed (a lapsed domain, a GoDaddy parking page,
+// a bare hosting default page all still get mentioned in search results
+// for months after they stop being the company's real site). If the direct
+// fetch says the site is dead, that's final -- no AI call needed, and
+// nothing it might infer from search results can override a real fetch
+// failure. Only once the site is confirmed genuinely live does it bother
+// asking the AI to dig up a better contact from it.
 async function runVerify(l) {
-  const system = 'You verify B2B sales leads. Given a company name and website, search the web to confirm: (1) does the company still exist and does the website work, (2) is there a better/more specific contact (a named person, email, phone, or a "become a vendor/rep" page URL) than what\'s already known -- check the site\'s About/Team/Contact pages for an actual name and title, not just a general office line. ' +
+  const checkUrl = MLF_WORKER_URL + '/check-url?url=' + encodeURIComponent(l.website || '');
+  const check = await fetchJson(checkUrl, { headers: mlfHeaders(), timeoutMs: 15000 }).catch((e) => ({ ok: false, reason: 'Check failed: ' + e.message }));
+  if (!check.ok) {
+    return { ok: false, contact: '', note: check.reason || 'Website did not load.' };
+  }
+  const system = 'You verify B2B sales leads. The company\'s website has already been confirmed to load correctly -- your only job is finding a better/more specific contact (a named person, email, phone, or a "become a vendor/rep" page URL) than what\'s already known. Search the web and check the site\'s About/Team/Contact pages for an actual name and title, not just a general office line. ' +
     'For "contact", build a single string combining whatever you can actually verify, in this exact order and format, omitting any piece you cannot find: "Ask for: <name>, <title> · <phone> · <email>". Never invent a name -- leave it out of the string entirely if the site doesn\'t publish one. ' +
-    'Return ONLY a JSON object (no prose): {ok: true/false, contact: "formatted contact string, or empty string if truly nothing found", note: "one short sentence"}.';
-  const userMsg = 'Company: ' + l.company + '\nWebsite: ' + l.website + '\nKnown contact: ' + (l.contact || 'none') + '\n\nVerify and return JSON only.';
-  const res = await fetchJson(AI_WORKER_URL, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      _accessCode: AI_WORKER_AUTH, model: 'claude-sonnet-4-5', max_tokens: 600, system,
-      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }],
-      messages: [{ role: 'user', content: userMsg }],
-    }),
-    timeoutMs: 60000,
-  });
-  let text = '';
-  for (const b of (res.content || [])) if (b.type === 'text') text += b.text;
-  const start = text.indexOf('{'), end = text.lastIndexOf('}');
-  return JSON.parse(text.slice(start, end + 1));
+    'Return ONLY a JSON object (no prose): {contact: "formatted contact string, or empty string if truly nothing found", note: "one short sentence"}.';
+  const userMsg = 'Company: ' + l.company + '\nWebsite: ' + l.website + '\nKnown contact: ' + (l.contact || 'none') + '\n\nFind the best contact and return JSON only.';
+  try {
+    const res = await fetchJson(AI_WORKER_URL, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        _accessCode: AI_WORKER_AUTH, model: 'claude-sonnet-4-5', max_tokens: 600, system,
+        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }],
+        messages: [{ role: 'user', content: userMsg }],
+      }),
+      timeoutMs: 60000,
+    });
+    let text = '';
+    for (const b of (res.content || [])) if (b.type === 'text') text += b.text;
+    const start = text.indexOf('{'), end = text.lastIndexOf('}');
+    const parsed = JSON.parse(text.slice(start, end + 1));
+    return { ok: true, contact: parsed.contact || '', note: parsed.note || check.reason || 'Site is live.' };
+  } catch (e) {
+    // Contact lookup failing doesn't mean the lead is bad -- the site
+    // itself already passed the real fetch check above.
+    return { ok: true, contact: '', note: check.reason || 'Site is live; contact lookup failed.' };
+  }
 }
 // Verify's own search can come back with less than the original search
 // already had (e.g. it finds the phone but not the name this time) -- never
