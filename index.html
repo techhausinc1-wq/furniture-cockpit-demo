@@ -97,6 +97,9 @@
   .btn.ghost { background: var(--bg-3); border: 1px solid var(--line-2); color: var(--ink-2); }
   .btn.ghost:hover { border-color: var(--navy); }
   .btn.sm { padding: 6px 11px; font-size: 12px; }
+  .current-sheet-indicator { font-size: 11.5px; color: var(--text-mute); white-space: nowrap; }
+  .current-sheet-indicator a { color: var(--text-mute); text-decoration: underline; }
+  .current-sheet-indicator a:hover { color: var(--ink-2); }
   .btn.full { width: 100%; justify-content: center; }
 
   .progress-note { font-size: 12.5px; color: var(--terracotta); margin-top: 10px; display: none; align-items: center; gap: 8px; }
@@ -265,6 +268,8 @@
     <span class="verify-progress no-print" id="verify-progress"><div class="spin"></div><span id="verify-progress-text"></span></span>
     <button class="btn ghost sm no-print" onclick="exportLeadsToExcel()">Export to Excel</button>
     <button class="btn ghost sm no-print" id="sheet-btn-leads" onclick="exportToSheet('leads')">Export to Google Sheet</button>
+    <button class="btn ghost sm no-print" id="sheet-update-btn-leads" onclick="updateCurrentSheet('leads')" title="Push current leads into the sheet already shared with the team, instead of creating a new link">Update current sheet</button>
+    <span class="current-sheet-indicator no-print" id="current-sheet-indicator"></span>
     <button class="btn ghost sm no-print" onclick="window.print()">Print / Export PDF</button>
     <div class="user-chip"><div class="user-avatar" id="user-avatar">?</div><span id="user-name"></span></div>
     <span class="logout-btn no-print" onclick="logout()">Log out</span>
@@ -806,6 +811,7 @@ async function enterApp() {
   document.getElementById('user-name').textContent = session.name;
   renderRegionChips();
   handleSheetRedirect();
+  loadCurrentSheet();
   await Promise.all([reloadLeads(), reloadShows()]);
 }
 
@@ -894,6 +900,68 @@ function resetSheetButtons() {
   if (leadsBtn) { leadsBtn.disabled = false; leadsBtn.textContent = 'Export to Google Sheet'; }
   const showsBtn = document.getElementById('sheet-btn-shows');
   if (showsBtn) { showsBtn.disabled = false; showsBtn.textContent = 'Export to Google Sheet'; }
+  const updateBtn = document.getElementById('sheet-update-btn-leads');
+  if (updateBtn) { updateBtn.disabled = false; updateBtn.textContent = 'Update current sheet'; }
+}
+
+// The one sheet the team actually has bookmarked/emailed -- "Export to
+// Google Sheet" always makes a new link, which is exactly how the old
+// stale-sheet mess happened (link already sent to Vlad, no way to push
+// corrected leads into it). This pushes fresh data into that SAME sheet
+// instead of minting a new URL every time.
+let currentMlfSheet = null;
+async function loadCurrentSheet() {
+  try {
+    const res = await fetchJson(MLF_WORKER_URL + '/sheets/current', { headers: mlfHeaders(), timeoutMs: 10000 });
+    currentMlfSheet = res.current || null;
+  } catch (e) {
+    currentMlfSheet = null;
+  }
+  renderCurrentSheetIndicator();
+}
+function renderCurrentSheetIndicator() {
+  const el = document.getElementById('current-sheet-indicator');
+  const updateBtn = document.getElementById('sheet-update-btn-leads');
+  if (!el || !updateBtn) return;
+  if (currentMlfSheet) {
+    el.innerHTML = '<a href="' + currentMlfSheet.url + '" target="_blank" rel="noopener" title="Open the current sheet">current sheet</a> · <a href="#" onclick="changeCurrentSheet();return false;">change</a>';
+    updateBtn.title = 'Push current leads into the sheet already shared with the team, instead of creating a new link';
+  } else {
+    el.innerHTML = '<a href="#" onclick="changeCurrentSheet();return false;">pin a sheet</a>';
+    updateBtn.title = 'No current sheet pinned yet -- click "pin a sheet" first, or use Export to Google Sheet to create one (it auto-pins).';
+  }
+}
+function changeCurrentSheet() {
+  const input = prompt('Paste the Google Sheet URL (or ID) the team should keep using:', currentMlfSheet ? currentMlfSheet.url : '');
+  if (!input || !input.trim()) return;
+  fetchJson(MLF_WORKER_URL + '/sheets/current', {
+    method: 'PUT',
+    headers: { ...mlfHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url: input.trim() }),
+    timeoutMs: 10000,
+  }).then((res) => {
+    currentMlfSheet = res.current || null;
+    renderCurrentSheetIndicator();
+    toast('Current sheet updated.');
+  }).catch((e) => toast('Could not pin that sheet: ' + e.message));
+}
+async function updateCurrentSheet(kind) {
+  if (!currentMlfSheet) { changeCurrentSheet(); return; }
+  const btn = document.getElementById('sheet-update-btn-leads');
+  const scopeIds = kind === 'leads' && selectedLeadIds.size ? Array.from(selectedLeadIds) : null;
+  if (kind === 'leads') {
+    await verifyUnverifiedLeads(scopeIds ? leads.filter(l => scopeIds.includes(l.id)) : leads, {});
+  }
+  btn.disabled = true; btn.textContent = 'Opening Google…';
+  try {
+    let url = MLF_WORKER_URL + '/sheets/reformat-auth?spreadsheetId=' + encodeURIComponent(currentMlfSheet.spreadsheetId) + '&resyncKind=' + kind;
+    if (scopeIds) url += '&ids=' + scopeIds.join(',');
+    const res = await fetchJson(url, { headers: mlfHeaders(), timeoutMs: 15000 });
+    window.location.href = res.url;
+  } catch (e) {
+    toast('Could not start Google sign-in: ' + e.message);
+    resetSheetButtons();
+  }
 }
 // If the user navigates to Google then hits Back instead of finishing the
 // OAuth flow, the browser can restore this page from bfcache with the
