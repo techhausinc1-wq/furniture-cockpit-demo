@@ -316,6 +316,7 @@
             <option value="casino and gaming venue FF&E procurement agents and purchasing departments who source lounge, restaurant, and gaming floor furniture">Casino / gaming procurement</option>
             <option value="senior living and assisted living facility FF&E procurement firms and purchasing agents">Senior living procurement</option>
             <option value="event, trade show, and corporate furniture rental and staging companies who supply furniture to events and conferences rather than manufacture it">Event / rental furniture cos.</option>
+            <option value="golf course and country club renovation firms, and bar and restaurant remodel/design-build contractors, who manage furniture replacement for clubhouse, lounge, and bar renovation projects on behalf of venue owners">Golf/country club &amp; bar remodel contractors</option>
             <option value="all">All categories</option>
           </select>
         </div>
@@ -1786,6 +1787,7 @@ const SPECIFIER_CATEGORIES = new Set([
   'casino and gaming venue FF&E procurement agents and purchasing departments who source lounge, restaurant, and gaming floor furniture',
   'senior living and assisted living facility FF&E procurement firms and purchasing agents',
   'event, trade show, and corporate furniture rental and staging companies who supply furniture to events and conferences rather than manufacture it',
+  'golf course and country club renovation firms, and bar and restaurant remodel/design-build contractors, who manage furniture replacement for clubhouse, lounge, and bar renovation projects on behalf of venue owners',
 ]);
 // Maps every search-category string to the short storage code shown as the
 // row's category pill. Exact match, not substring -- the old ternary
@@ -1806,6 +1808,7 @@ const CATEGORY_CODE_MAP = {
   'casino and gaming venue FF&E procurement agents and purchasing departments who source lounge, restaurant, and gaming floor furniture': 'casino',
   'senior living and assisted living facility FF&E procurement firms and purchasing agents': 'senior-living',
   'event, trade show, and corporate furniture rental and staging companies who supply furniture to events and conferences rather than manufacture it': 'event-rental',
+  'golf course and country club renovation firms, and bar and restaurant remodel/design-build contractors, who manage furniture replacement for clubhouse, lounge, and bar renovation projects on behalf of venue owners': 'golf-remodel',
 };
 // The short storage codes a lead's category can actually be, with a human
 // label -- used both for "Add lead manually" and for editing an existing
@@ -1974,6 +1977,7 @@ const DAILY_SCOUT_CATEGORIES = [
   'casino and gaming venue FF&E procurement agents and purchasing departments who source lounge, restaurant, and gaming floor furniture',
   'senior living and assisted living facility FF&E procurement firms and purchasing agents',
   'event, trade show, and corporate furniture rental and staging companies who supply furniture to events and conferences rather than manufacture it',
+  'golf course and country club renovation firms, and bar and restaurant remodel/design-build contractors, who manage furniture replacement for clubhouse, lounge, and bar renovation projects on behalf of venue owners',
 ];
 async function runDailyScout() {
   const btn = document.getElementById('daily-scout-btn');
